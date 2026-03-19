@@ -1,0 +1,688 @@
+package org.delightofcomposition.gui;
+
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.GradientPaint;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Insets;
+import java.awt.RenderingHints;
+import java.awt.geom.RoundRectangle2D;
+
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JProgressBar;
+import javax.swing.JScrollBar;
+import javax.swing.JScrollPane;
+import javax.swing.JSlider;
+import javax.swing.JSpinner;
+import javax.swing.JSplitPane;
+import javax.swing.JTextField;
+import javax.swing.UIManager;
+import javax.swing.border.AbstractBorder;
+import javax.swing.border.Border;
+import javax.swing.plaf.basic.BasicProgressBarUI;
+import javax.swing.plaf.basic.BasicScrollBarUI;
+import javax.swing.plaf.basic.BasicSliderUI;
+import javax.swing.plaf.basic.BasicSplitPaneUI;
+
+/**
+ * shadcn/ui-inspired dark theme for Swing.
+ * Zinc color palette with rounded corners, subtle borders, and clean typography.
+ */
+public class Theme {
+
+    // ── Zinc palette ──
+    public static final Color ZINC_50  = new Color(250, 250, 250);
+    public static final Color ZINC_100 = new Color(244, 244, 245);
+    public static final Color ZINC_200 = new Color(228, 228, 231);
+    public static final Color ZINC_300 = new Color(212, 212, 216);
+    public static final Color ZINC_400 = new Color(161, 161, 170);
+    public static final Color ZINC_500 = new Color(113, 113, 122);
+    public static final Color ZINC_600 = new Color(82, 82, 91);
+    public static final Color ZINC_700 = new Color(63, 63, 70);
+    public static final Color ZINC_800 = new Color(39, 39, 42);
+    public static final Color ZINC_900 = new Color(24, 24, 27);
+    public static final Color ZINC_950 = new Color(9, 9, 11);
+
+    // ── Semantic tokens (dark mode) ──
+    public static final Color BG            = ZINC_950;
+    public static final Color BG_CARD       = ZINC_900;
+    public static final Color BG_MUTED      = ZINC_800;
+    public static final Color BG_INPUT      = new Color(30, 30, 34);
+    public static final Color BORDER        = ZINC_800;
+    public static final Color BORDER_SUBTLE = new Color(45, 45, 50);
+    public static final Color FG            = ZINC_50;
+    public static final Color FG_MUTED      = ZINC_400;
+    public static final Color FG_DIM        = ZINC_500;
+    public static final Color ACCENT        = new Color(99, 102, 241);   // indigo-500
+    public static final Color ACCENT_HOVER  = new Color(129, 140, 248);  // indigo-400
+    public static final Color ACCENT_MUTED  = new Color(99, 102, 241, 30);
+    public static final Color DESTRUCTIVE   = new Color(239, 68, 68);
+    public static final Color SUCCESS       = new Color(34, 197, 94);
+    public static final Color RING          = new Color(99, 102, 241, 80);
+
+    // ── Typography ──
+    public static final Font FONT_BASE    = new Font("Segoe UI", Font.PLAIN, 13);
+    public static final Font FONT_SMALL   = new Font("Segoe UI", Font.PLAIN, 11);
+    public static final Font FONT_LABEL   = new Font("Segoe UI", Font.PLAIN, 12);
+    public static final Font FONT_HEADING = new Font("Segoe UI", Font.BOLD, 13);
+    public static final Font FONT_TITLE   = new Font("Segoe UI", Font.BOLD, 11);
+    public static final Font FONT_MONO    = new Font("Consolas", Font.PLAIN, 12);
+
+    // ── Dimensions ──
+    public static final int RADIUS = 8;
+    public static final int RADIUS_SM = 6;
+    public static final int RADIUS_LG = 12;
+
+    // ── Phone-style spacing ──
+    public static final int TOUCH_TARGET = 44;
+    public static final int SECTION_GAP = 20;
+    public static final int CONTROL_GAP = 14;
+    public static final int LABEL_GAP = 6;
+
+    // ── Additional fonts ──
+    public static final Font FONT_VALUE   = new Font("Consolas", Font.PLAIN, 14);
+    public static final Font FONT_SECTION = new Font("Segoe UI", Font.BOLD, 10);
+
+    /**
+     * Apply the theme globally via UIManager defaults.
+     */
+    public static void install() {
+        // Panel / general
+        UIManager.put("Panel.background", BG);
+        UIManager.put("Panel.foreground", FG);
+
+        // Labels
+        UIManager.put("Label.foreground", FG);
+        UIManager.put("Label.font", FONT_LABEL);
+
+        // Buttons
+        UIManager.put("Button.background", BG_MUTED);
+        UIManager.put("Button.foreground", FG);
+        UIManager.put("Button.font", FONT_BASE);
+        UIManager.put("Button.focus", new Color(0, 0, 0, 0));
+        UIManager.put("Button.select", ZINC_700);
+        UIManager.put("Button.border", BorderFactory.createEmptyBorder(6, 16, 6, 16));
+
+        // Text fields
+        UIManager.put("TextField.background", BG_INPUT);
+        UIManager.put("TextField.foreground", FG);
+        UIManager.put("TextField.caretForeground", FG);
+        UIManager.put("TextField.font", FONT_BASE);
+        UIManager.put("TextField.border", new RoundedBorder(BORDER, RADIUS_SM, new Insets(6, 10, 6, 10)));
+
+        // Spinners
+        UIManager.put("Spinner.background", BG_INPUT);
+        UIManager.put("Spinner.foreground", FG);
+        UIManager.put("Spinner.font", FONT_BASE);
+        UIManager.put("Spinner.border", new RoundedBorder(BORDER, RADIUS_SM, new Insets(2, 2, 2, 2)));
+        UIManager.put("Spinner.arrowButtonBackground", BG_MUTED);
+        UIManager.put("Spinner.arrowButtonBorder", BorderFactory.createEmptyBorder());
+        UIManager.put("FormattedTextField.background", BG_INPUT);
+        UIManager.put("FormattedTextField.foreground", FG);
+
+        // ComboBox
+        UIManager.put("ComboBox.background", BG_INPUT);
+        UIManager.put("ComboBox.foreground", FG);
+        UIManager.put("ComboBox.selectionBackground", ACCENT);
+        UIManager.put("ComboBox.selectionForeground", FG);
+        UIManager.put("ComboBox.font", FONT_BASE);
+        UIManager.put("ComboBox.border", new RoundedBorder(BORDER, RADIUS_SM, new Insets(4, 8, 4, 8)));
+        UIManager.put("ComboBox.buttonBackground", BG_INPUT);
+
+        // CheckBox
+        UIManager.put("CheckBox.background", BG);
+        UIManager.put("CheckBox.foreground", FG);
+        UIManager.put("CheckBox.font", FONT_BASE);
+        UIManager.put("CheckBox.focus", new Color(0, 0, 0, 0));
+
+        // Sliders
+        UIManager.put("Slider.background", BG);
+        UIManager.put("Slider.foreground", FG);
+        UIManager.put("Slider.focus", new Color(0, 0, 0, 0));
+        UIManager.put("Slider.trackWidth", 6);
+        UIManager.put("Slider.thumbWidth", 16);
+
+        // Progress bar
+        UIManager.put("ProgressBar.background", BG_MUTED);
+        UIManager.put("ProgressBar.foreground", ACCENT);
+        UIManager.put("ProgressBar.selectionBackground", FG);
+        UIManager.put("ProgressBar.selectionForeground", BG);
+        UIManager.put("ProgressBar.font", FONT_SMALL);
+        UIManager.put("ProgressBar.border", BorderFactory.createEmptyBorder());
+
+        // Scroll pane / bar
+        UIManager.put("ScrollPane.background", BG);
+        UIManager.put("ScrollPane.border", BorderFactory.createEmptyBorder());
+        UIManager.put("ScrollBar.background", BG);
+        UIManager.put("ScrollBar.foreground", ZINC_600);
+        UIManager.put("ScrollBar.thumbDarkShadow", BG);
+        UIManager.put("ScrollBar.thumbHighlight", BG);
+        UIManager.put("ScrollBar.thumbShadow", BG);
+        UIManager.put("ScrollBar.track", BG);
+        UIManager.put("ScrollBar.thumb", ZINC_700);
+        UIManager.put("ScrollBar.width", 10);
+
+        // SplitPane
+        UIManager.put("SplitPane.background", BG);
+        UIManager.put("SplitPane.border", BorderFactory.createEmptyBorder());
+        UIManager.put("SplitPane.dividerSize", 1);
+        UIManager.put("SplitPaneDivider.border", BorderFactory.createEmptyBorder());
+
+        // Menu
+        UIManager.put("MenuBar.background", BG_CARD);
+        UIManager.put("MenuBar.foreground", FG);
+        UIManager.put("MenuBar.font", FONT_BASE);
+        UIManager.put("MenuBar.border", BorderFactory.createMatteBorder(0, 0, 1, 0, BORDER));
+        UIManager.put("Menu.background", BG_CARD);
+        UIManager.put("Menu.foreground", FG);
+        UIManager.put("Menu.selectionBackground", BG_MUTED);
+        UIManager.put("Menu.selectionForeground", FG);
+        UIManager.put("Menu.font", FONT_BASE);
+        UIManager.put("MenuItem.background", BG_CARD);
+        UIManager.put("MenuItem.foreground", FG);
+        UIManager.put("MenuItem.selectionBackground", BG_MUTED);
+        UIManager.put("MenuItem.selectionForeground", FG);
+        UIManager.put("MenuItem.font", FONT_BASE);
+        UIManager.put("MenuItem.acceleratorForeground", FG_DIM);
+        UIManager.put("PopupMenu.background", BG_CARD);
+        UIManager.put("PopupMenu.foreground", FG);
+        UIManager.put("PopupMenu.border", new RoundedBorder(BORDER, RADIUS_SM, new Insets(4, 0, 4, 0)));
+
+        // Tooltip
+        UIManager.put("ToolTip.background", BG_CARD);
+        UIManager.put("ToolTip.foreground", FG);
+        UIManager.put("ToolTip.font", FONT_SMALL);
+        UIManager.put("ToolTip.border", new RoundedBorder(BORDER, RADIUS_SM, new Insets(4, 8, 4, 8)));
+
+        // Option pane / dialog
+        UIManager.put("OptionPane.background", BG_CARD);
+        UIManager.put("OptionPane.foreground", FG);
+        UIManager.put("OptionPane.messageForeground", FG);
+        UIManager.put("OptionPane.font", FONT_BASE);
+
+        // File chooser
+        UIManager.put("FileChooser.background", BG_CARD);
+        UIManager.put("FileChooser.foreground", FG);
+        UIManager.put("FileChooser.listFont", FONT_BASE);
+
+        // List (used in combo popups, file choosers)
+        UIManager.put("List.background", BG_CARD);
+        UIManager.put("List.foreground", FG);
+        UIManager.put("List.selectionBackground", ACCENT);
+        UIManager.put("List.selectionForeground", FG);
+
+        // Table / tree (file chooser internals)
+        UIManager.put("Table.background", BG_CARD);
+        UIManager.put("Table.foreground", FG);
+        UIManager.put("Table.selectionBackground", ACCENT);
+        UIManager.put("Table.selectionForeground", FG);
+        UIManager.put("Table.gridColor", BORDER);
+        UIManager.put("TableHeader.background", BG_MUTED);
+        UIManager.put("TableHeader.foreground", FG);
+
+        // Titled border
+        UIManager.put("TitledBorder.titleColor", FG_MUTED);
+        UIManager.put("TitledBorder.border", BorderFactory.createLineBorder(BORDER));
+    }
+
+    // ── Custom Borders ──
+
+    /**
+     * A rounded-corner border with configurable color, radius, and padding.
+     */
+    public static class RoundedBorder extends AbstractBorder {
+        private final Color color;
+        private final int radius;
+        private final Insets insets;
+
+        public RoundedBorder(Color color, int radius, Insets insets) {
+            this.color = color;
+            this.radius = radius;
+            this.insets = insets;
+        }
+
+        @Override
+        public void paintBorder(Component c, Graphics g, int x, int y, int w, int h) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(color);
+            g2.drawRoundRect(x, y, w - 1, h - 1, radius, radius);
+            g2.dispose();
+        }
+
+        @Override
+        public Insets getBorderInsets(Component c) {
+            return insets;
+        }
+
+        @Override
+        public Insets getBorderInsets(Component c, Insets i) {
+            i.left = insets.left; i.top = insets.top;
+            i.right = insets.right; i.bottom = insets.bottom;
+            return i;
+        }
+    }
+
+    /**
+     * Card-style border: rounded rect with filled background.
+     */
+    public static class CardBorder extends AbstractBorder {
+        private final Color bg;
+        private final Color border;
+        private final int radius;
+        private final Insets insets;
+
+        public CardBorder(Color bg, Color border, int radius, Insets insets) {
+            this.bg = bg;
+            this.border = border;
+            this.radius = radius;
+            this.insets = insets;
+        }
+
+        public CardBorder() {
+            this(BG_CARD, BORDER, RADIUS, new Insets(12, 14, 12, 14));
+        }
+
+        @Override
+        public void paintBorder(Component c, Graphics g, int x, int y, int w, int h) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(bg);
+            g2.fillRoundRect(x, y, w - 1, h - 1, radius, radius);
+            g2.setColor(border);
+            g2.drawRoundRect(x, y, w - 1, h - 1, radius, radius);
+            g2.dispose();
+        }
+
+        @Override
+        public Insets getBorderInsets(Component c) {
+            return insets;
+        }
+
+        @Override
+        public Insets getBorderInsets(Component c, Insets i) {
+            i.left = insets.left; i.top = insets.top;
+            i.right = insets.right; i.bottom = insets.bottom;
+            return i;
+        }
+    }
+
+    // ── Styled component factories ──
+
+    /**
+     * Create a primary (filled) button.
+     */
+    public static JButton primaryButton(String text) {
+        JButton btn = new JButton(text) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                Color bg = getModel().isPressed() ? ACCENT : getModel().isRollover() ? ACCENT_HOVER : FG;
+                Color fg = getModel().isPressed() ? FG : BG;
+
+                if (!isEnabled()) {
+                    bg = ZINC_700;
+                    fg = ZINC_500;
+                }
+
+                g2.setColor(bg);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), RADIUS, RADIUS);
+                g2.setColor(fg);
+                g2.setFont(getFont());
+                FontMetrics fm = g2.getFontMetrics();
+                int tx = (getWidth() - fm.stringWidth(getText())) / 2;
+                int ty = (getHeight() + fm.getAscent() - fm.getDescent()) / 2;
+                g2.drawString(getText(), tx, ty);
+                g2.dispose();
+            }
+        };
+        btn.setContentAreaFilled(false);
+        btn.setBorderPainted(false);
+        btn.setFocusPainted(false);
+        btn.setFont(FONT_BASE);
+        btn.setForeground(BG);
+        return btn;
+    }
+
+    /**
+     * Create a secondary (outline) button.
+     */
+    public static JButton secondaryButton(String text) {
+        JButton btn = new JButton(text) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                Color bg = getModel().isPressed() ? ZINC_700 : getModel().isRollover() ? BG_MUTED : BG_CARD;
+                if (!isEnabled()) bg = ZINC_900;
+
+                g2.setColor(bg);
+                g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, RADIUS, RADIUS);
+                g2.setColor(isEnabled() ? BORDER : ZINC_800);
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, RADIUS, RADIUS);
+
+                g2.setColor(isEnabled() ? FG : ZINC_600);
+                g2.setFont(getFont());
+                FontMetrics fm = g2.getFontMetrics();
+                int tx = (getWidth() - fm.stringWidth(getText())) / 2;
+                int ty = (getHeight() + fm.getAscent() - fm.getDescent()) / 2;
+                g2.drawString(getText(), tx, ty);
+                g2.dispose();
+            }
+        };
+        btn.setContentAreaFilled(false);
+        btn.setBorderPainted(false);
+        btn.setFocusPainted(false);
+        btn.setFont(FONT_BASE);
+        btn.setForeground(FG);
+        return btn;
+    }
+
+    /**
+     * Create a ghost button (no border, subtle hover).
+     */
+    public static JButton ghostButton(String text) {
+        JButton btn = new JButton(text) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                if (getModel().isRollover() || getModel().isPressed()) {
+                    g2.setColor(getModel().isPressed() ? ZINC_700 : BG_MUTED);
+                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), RADIUS, RADIUS);
+                }
+
+                g2.setColor(isEnabled() ? FG : ZINC_600);
+                g2.setFont(getFont());
+                FontMetrics fm = g2.getFontMetrics();
+                int tx = (getWidth() - fm.stringWidth(getText())) / 2;
+                int ty = (getHeight() + fm.getAscent() - fm.getDescent()) / 2;
+                g2.drawString(getText(), tx, ty);
+                g2.dispose();
+            }
+        };
+        btn.setContentAreaFilled(false);
+        btn.setBorderPainted(false);
+        btn.setFocusPainted(false);
+        btn.setFont(FONT_BASE);
+        btn.setForeground(FG);
+        return btn;
+    }
+
+    /**
+     * Create a styled progress bar with rounded track and fill.
+     */
+    public static JProgressBar styledProgressBar() {
+        JProgressBar bar = new JProgressBar(0, 100);
+        bar.setUI(new BasicProgressBarUI() {
+            @Override
+            protected void paintDeterminate(Graphics g, JComponent c) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                int w = c.getWidth();
+                int h = c.getHeight();
+                int r = h;
+
+                // Track
+                g2.setColor(BG_MUTED);
+                g2.fillRoundRect(0, 0, w, h, r, r);
+
+                // Fill
+                int fillW = (int) (w * bar.getPercentComplete());
+                if (fillW > 0) {
+                    g2.setColor(ACCENT);
+                    g2.fillRoundRect(0, 0, fillW, h, r, r);
+                }
+
+                // Text
+                if (bar.isStringPainted()) {
+                    g2.setFont(FONT_SMALL);
+                    g2.setColor(FG);
+                    FontMetrics fm = g2.getFontMetrics();
+                    String s = bar.getString();
+                    int tx = (w - fm.stringWidth(s)) / 2;
+                    int ty = (h + fm.getAscent() - fm.getDescent()) / 2;
+                    g2.drawString(s, tx, ty);
+                }
+
+                g2.dispose();
+            }
+
+            @Override
+            protected void paintIndeterminate(Graphics g, JComponent c) {
+                paintDeterminate(g, c);
+            }
+        });
+        bar.setOpaque(false);
+        bar.setBorder(BorderFactory.createEmptyBorder());
+        bar.setStringPainted(true);
+        bar.setFont(FONT_SMALL);
+        return bar;
+    }
+
+    /**
+     * Create a section header label (uppercase, muted, small).
+     */
+    public static JLabel sectionLabel(String text) {
+        JLabel label = new JLabel(text.toUpperCase());
+        label.setFont(FONT_TITLE);
+        label.setForeground(FG_MUTED);
+        return label;
+    }
+
+    /**
+     * Create a parameter label.
+     */
+    public static JLabel paramLabel(String text) {
+        JLabel label = new JLabel(text);
+        label.setFont(FONT_LABEL);
+        label.setForeground(FG_MUTED);
+        return label;
+    }
+
+    /**
+     * Create a value display label (monospace).
+     */
+    public static JLabel valueLabel(String text) {
+        JLabel label = new JLabel(text);
+        label.setFont(FONT_MONO);
+        label.setForeground(FG);
+        return label;
+    }
+
+    /**
+     * Create a card panel with rounded border and dark fill.
+     */
+    public static JPanel card() {
+        JPanel panel = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(BG_CARD);
+                g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, RADIUS_LG, RADIUS_LG);
+                g2.setColor(BORDER);
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, RADIUS_LG, RADIUS_LG);
+                g2.dispose();
+            }
+        };
+        panel.setOpaque(false);
+        return panel;
+    }
+
+    /**
+     * Style a slider to look like shadcn's.
+     */
+    public static void styleSlider(JSlider slider) {
+        slider.setOpaque(false);
+        slider.setUI(new BasicSliderUI(slider) {
+            @Override
+            public void paintTrack(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                int trackH = 6;
+                int y = trackRect.y + (trackRect.height - trackH) / 2;
+
+                // Full track background
+                g2.setColor(BG_MUTED);
+                g2.fillRoundRect(trackRect.x, y, trackRect.width, trackH, trackH, trackH);
+
+                // Filled portion
+                int fillW = thumbRect.x + thumbRect.width / 2 - trackRect.x;
+                g2.setColor(ACCENT);
+                g2.fillRoundRect(trackRect.x, y, fillW, trackH, trackH, trackH);
+
+                g2.dispose();
+            }
+
+            @Override
+            public void paintThumb(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                int size = 16;
+                int x = thumbRect.x + (thumbRect.width - size) / 2;
+                int y = thumbRect.y + (thumbRect.height - size) / 2;
+
+                // Shadow
+                g2.setColor(new Color(0, 0, 0, 40));
+                g2.fillOval(x + 1, y + 1, size, size);
+
+                // Thumb
+                g2.setColor(FG);
+                g2.fillOval(x, y, size, size);
+
+                // Border
+                g2.setColor(ACCENT);
+                g2.drawOval(x, y, size - 1, size - 1);
+
+                g2.dispose();
+            }
+
+            @Override
+            public void paintFocus(Graphics g) {
+                // no focus ring
+            }
+        });
+    }
+
+    /**
+     * Style a scroll pane with thin dark scrollbars.
+     */
+    public static void styleScrollPane(JScrollPane sp) {
+        sp.setBorder(BorderFactory.createEmptyBorder());
+        sp.getViewport().setBackground(BG);
+        JScrollBar vbar = sp.getVerticalScrollBar();
+        JScrollBar hbar = sp.getHorizontalScrollBar();
+        styleScrollBar(vbar);
+        styleScrollBar(hbar);
+    }
+
+    /**
+     * Section header: uppercase label + 1px divider beneath, ~24px total.
+     */
+    public static JPanel sectionHeader(String text) {
+        JPanel panel = new JPanel();
+        panel.setLayout(new javax.swing.BoxLayout(panel, javax.swing.BoxLayout.Y_AXIS));
+        panel.setOpaque(false);
+        panel.setAlignmentX(0);
+
+        JLabel label = new JLabel(text.toUpperCase());
+        label.setFont(FONT_SECTION);
+        label.setForeground(FG_MUTED);
+        label.setAlignmentX(0);
+        panel.add(label);
+        panel.add(javax.swing.Box.createVerticalStrut(4));
+
+        JComponent divider = new JComponent() {
+            @Override
+            protected void paintComponent(java.awt.Graphics g) {
+                g.setColor(BORDER_SUBTLE);
+                g.fillRect(0, 0, getWidth(), 1);
+            }
+        };
+        divider.setPreferredSize(new java.awt.Dimension(Integer.MAX_VALUE, 1));
+        divider.setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, 1));
+        divider.setAlignmentX(0);
+        panel.add(divider);
+
+        panel.setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, 30));
+        return panel;
+    }
+
+    /**
+     * Toggle row: label on the left, control on the right, 44px height.
+     */
+    public static JPanel toggleRow(String label, JComponent control) {
+        JPanel row = new JPanel();
+        row.setLayout(new java.awt.BorderLayout());
+        row.setOpaque(false);
+        row.setAlignmentX(0);
+        row.setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, TOUCH_TARGET));
+        row.setPreferredSize(new java.awt.Dimension(200, TOUCH_TARGET));
+
+        JLabel lbl = paramLabel(label);
+        lbl.setVerticalAlignment(javax.swing.SwingConstants.CENTER);
+        row.add(lbl, java.awt.BorderLayout.WEST);
+        row.add(control, java.awt.BorderLayout.EAST);
+        return row;
+    }
+
+    private static void styleScrollBar(JScrollBar bar) {
+        bar.setUI(new BasicScrollBarUI() {
+            @Override
+            protected void configureScrollBarColors() {
+                thumbColor = ZINC_700;
+                trackColor = BG;
+            }
+
+            @Override
+            protected JButton createDecreaseButton(int orientation) {
+                return zeroButton();
+            }
+
+            @Override
+            protected JButton createIncreaseButton(int orientation) {
+                return zeroButton();
+            }
+
+            @Override
+            protected void paintThumb(Graphics g, JComponent c, java.awt.Rectangle r) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(ZINC_700);
+                g2.fillRoundRect(r.x + 2, r.y + 2, r.width - 4, r.height - 4, 6, 6);
+                g2.dispose();
+            }
+
+            @Override
+            protected void paintTrack(Graphics g, JComponent c, java.awt.Rectangle r) {
+                g.setColor(BG);
+                g.fillRect(r.x, r.y, r.width, r.height);
+            }
+
+            private JButton zeroButton() {
+                JButton btn = new JButton();
+                btn.setPreferredSize(new java.awt.Dimension(0, 0));
+                btn.setMaximumSize(new java.awt.Dimension(0, 0));
+                return btn;
+            }
+        });
+        bar.setPreferredSize(new java.awt.Dimension(8, 8));
+    }
+}
