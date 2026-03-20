@@ -353,7 +353,12 @@ public class ParameterPanel extends JPanel implements Scrollable {
 
         JButton playBtn = createPlayButton();
         playBtn.addActionListener(e -> toggleSamplePreview(playBtn, panel));
-        row.add(playBtn, BorderLayout.EAST);
+        // Wrap in a box so BorderLayout.EAST doesn't stretch the button vertically
+        Box btnBox = Box.createVerticalBox();
+        btnBox.add(Box.createVerticalGlue());
+        btnBox.add(playBtn);
+        btnBox.add(Box.createVerticalGlue());
+        row.add(btnBox, BorderLayout.EAST);
 
         row.setAlignmentX(0);
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 52));
