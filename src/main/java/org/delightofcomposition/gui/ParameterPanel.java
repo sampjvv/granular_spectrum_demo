@@ -1,18 +1,26 @@
 package org.delightofcomposition.gui;
 
+import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.Insets;
 import java.awt.Rectangle;
+import java.awt.RenderingHints;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.Scrollable;
 
 import org.delightofcomposition.SynthParameters;
+import org.delightofcomposition.sound.AudioPlayer;
+import org.delightofcomposition.sound.ReadSound;
+import org.delightofcomposition.sound.WaveWriter;
 
 /**
  * Phone-style parameter panel with single-column layout,
@@ -20,7 +28,10 @@ import org.delightofcomposition.SynthParameters;
  */
 public class ParameterPanel extends JPanel implements Scrollable {
 
+    private static final AudioPlayer previewPlayer = new AudioPlayer();
+
     private final SynthParameters params;
+    private JButton currentPreviewBtn;
 
     private SampleDropPanel sourceDropPanel;
     private SampleDropPanel grainDropPanel;
@@ -56,6 +67,29 @@ public class ParameterPanel extends JPanel implements Scrollable {
         add(Box.createVerticalStrut(Theme.SECTION_GAP));
         add(buildChordSection());
         add(Box.createVerticalGlue());
+
+        registerHelpTexts();
+    }
+
+    private void registerHelpTexts() {
+        HelpManager help = HelpManager.getInstance();
+        help.register(sourceDropPanel, "The audio file whose spectral content will be analyzed and resynthesized as granular texture.");
+        help.register(grainDropPanel, "The short audio sample used as the building block for granular synthesis. Its timbre colors the output.");
+        help.register(irDropPanel, "An impulse response recording used for convolution reverb, placing the sound in a virtual space.");
+        help.register(refFreqStepper, "The fundamental frequency (Hz) of the grain sample. Used to tune grains to match spectral peaks.");
+        help.register(windowSizeSegmented, "FFT window size: larger = better frequency resolution but smears timing. Smaller = better timing but coarser frequency.");
+        help.register(controlRateStepper, "Time between analysis windows. Lower = more detail but longer render. Higher = faster but less smooth.");
+        help.register(grainsPerPeakStepper, "How many grain copies per spectral peak. More = denser/richer texture, fewer = sparser/clearer.");
+        help.register(ampThresholdSlider, "Minimum amplitude for a spectral peak to trigger grains. Higher = only loud peaks, lower = more detail.");
+        help.register(useReverbToggle, "Apply convolution reverb using the impulse response sample to add spatial depth.");
+        help.register(sourceReverbSlider, "How much reverb to apply to the original source audio portion of the mix.");
+        help.register(synthReverbSlider, "How much reverb to apply to the granular synthesized portion of the mix.");
+        help.register(panSmoothSlider, "Smooths stereo panning changes over time. Higher = gentler panning, lower = more dramatic movement.");
+        help.register(crossfadeStepper, "Duration of the crossfade between source and synth audio at the mix transition point.");
+        help.register(dramaticSlider, "Exaggerates amplitude differences between spectral peaks. Higher = more contrast, lower = flatter.");
+        help.register(chordEnableToggle, "Render multiple transposed copies of the synthesis to build a just-intonation chord.");
+        help.register(chordRatiosField, "Frequency ratios for chord voices. E.g. '1, 3, 5' creates a just major triad (fundamental, 3rd harmonic, 5th harmonic).");
+        help.register(chordAttacksField, "Stagger the entry of each chord voice by these times in seconds. E.g. '0, 3, 4' for a gradual build.");
     }
 
     // ── Section builders ──
@@ -68,16 +102,12 @@ public class ParameterPanel extends JPanel implements Scrollable {
 
         sourceDropPanel = new SampleDropPanel("Source Sample", params.sourceFile,
                 file -> params.sourceFile = file);
-        sourceDropPanel.setToolTipText("The source sample to analyze spectrally");
-        sourceDropPanel.setAlignmentX(0);
-        card.add(sourceDropPanel);
+        card.add(sampleRow(sourceDropPanel));
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
 
         grainDropPanel = new SampleDropPanel("Grain Sample", params.grainFile,
                 file -> params.grainFile = file);
-        grainDropPanel.setToolTipText("The grain sample used for resynthesis");
-        grainDropPanel.setAlignmentX(0);
-        card.add(grainDropPanel);
+        card.add(sampleRow(grainDropPanel));
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
 
         JLabel refLabel = Theme.paramLabel("Reference Frequency");
@@ -87,15 +117,13 @@ public class ParameterPanel extends JPanel implements Scrollable {
         refFreqStepper = new StepperControl(params.grainReferenceFreq, 20, 20000, 1, "%.0f Hz");
         refFreqStepper.setAlignmentX(0);
         refFreqStepper.addChangeListener(e -> params.grainReferenceFreq = refFreqStepper.getDoubleValue());
-        refFreqStepper.setToolTipText("Fundamental frequency of the grain sample in Hz");
+
         card.add(refFreqStepper);
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
 
         irDropPanel = new SampleDropPanel("Impulse Response", params.impulseResponseFile,
                 file -> params.impulseResponseFile = file);
-        irDropPanel.setToolTipText("Impulse response for convolution reverb");
-        irDropPanel.setAlignmentX(0);
-        card.add(irDropPanel);
+        card.add(sampleRow(irDropPanel));
 
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
         return card;
@@ -116,7 +144,7 @@ public class ParameterPanel extends JPanel implements Scrollable {
         windowSizeSegmented.setAlignmentX(0);
         windowSizeSegmented.addChangeListener(e ->
                 params.windowSizeExponent = windowSizeSegmented.getSelectedIndex() + 10);
-        windowSizeSegmented.setToolTipText("FFT window size in samples");
+
         card.add(windowSizeSegmented);
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
 
@@ -127,7 +155,7 @@ public class ParameterPanel extends JPanel implements Scrollable {
         controlRateStepper = new StepperControl(params.controlRate, 0.01, 1.0, 0.01, "%.2f s");
         controlRateStepper.setAlignmentX(0);
         controlRateStepper.addChangeListener(e -> params.controlRate = controlRateStepper.getDoubleValue());
-        controlRateStepper.setToolTipText("Seconds between overlapping analysis windows");
+
         card.add(controlRateStepper);
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
 
@@ -138,7 +166,7 @@ public class ParameterPanel extends JPanel implements Scrollable {
         grainsPerPeakStepper = new StepperControl(params.grainsPerPeak, 1, 50, 1);
         grainsPerPeakStepper.setAlignmentX(0);
         grainsPerPeakStepper.addChangeListener(e -> params.grainsPerPeak = grainsPerPeakStepper.getIntValue());
-        grainsPerPeakStepper.setToolTipText("More grains = denser texture but longer render");
+
         card.add(grainsPerPeakStepper);
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
 
@@ -148,7 +176,7 @@ public class ParameterPanel extends JPanel implements Scrollable {
         ampThresholdSlider.setAlignmentX(0);
         ampThresholdSlider.addChangeListener(e ->
                 params.amplitudeThreshold = ampThresholdSlider.getValue() / 1000.0);
-        ampThresholdSlider.setToolTipText("Higher = only the loudest spectral peaks produce grains");
+
         card.add(ampThresholdSlider);
 
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
@@ -165,7 +193,7 @@ public class ParameterPanel extends JPanel implements Scrollable {
         useReverbToggle.addChangeListener(e -> params.useReverb = useReverbToggle.isSelected());
         JPanel toggleRow = Theme.toggleRow("Use Reverb", useReverbToggle);
         toggleRow.setAlignmentX(0);
-        toggleRow.setToolTipText("Enable/disable convolution reverb");
+
         card.add(toggleRow);
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
 
@@ -237,7 +265,7 @@ public class ParameterPanel extends JPanel implements Scrollable {
         chordEnableToggle.addChangeListener(e -> params.useChordMode = chordEnableToggle.isSelected());
         JPanel toggleRow = Theme.toggleRow("Enable", chordEnableToggle);
         toggleRow.setAlignmentX(0);
-        toggleRow.setToolTipText("Build a just-intonation chord from multiple transpositions");
+
         card.add(toggleRow);
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
 
@@ -253,7 +281,7 @@ public class ParameterPanel extends JPanel implements Scrollable {
                 parseChordRatios();
             }
         });
-        chordRatiosField.setToolTipText("Just intonation ratios, e.g. '1, 3, 5'");
+
         card.add(chordRatiosField);
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
 
@@ -269,11 +297,102 @@ public class ParameterPanel extends JPanel implements Scrollable {
                 parseChordAttacks();
             }
         });
-        chordAttacksField.setToolTipText("Stagger entry times in seconds, e.g. '0, 3, 4'");
+
         card.add(chordAttacksField);
 
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
         return card;
+    }
+
+    // ── Sample preview ──
+
+    private JButton createPlayButton() {
+        JButton btn = new JButton() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                if (getModel().isRollover() || getModel().isPressed()) {
+                    g2.setColor(getModel().isPressed() ? Theme.ZINC_700 : Theme.BG_MUTED);
+                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), Theme.RADIUS, Theme.RADIUS);
+                }
+
+                g2.setColor(isEnabled() ? Theme.FG : Theme.ZINC_600);
+                int cx = getWidth() / 2;
+                int cy = getHeight() / 2;
+                int s = 6; // half-size of icon
+
+                if ("stop".equals(getName())) {
+                    // filled square
+                    g2.fillRect(cx - s, cy - s, s * 2, s * 2);
+                } else {
+                    // filled triangle pointing right
+                    int[] xs = {cx - s, cx - s, cx + s};
+                    int[] ys = {cy - s, cy + s, cy};
+                    g2.fillPolygon(xs, ys, 3);
+                }
+                g2.dispose();
+            }
+        };
+        btn.setName("play");
+        btn.setContentAreaFilled(false);
+        btn.setBorderPainted(false);
+        btn.setFocusPainted(false);
+        btn.setPreferredSize(new Dimension(36, 36));
+        btn.setMinimumSize(new Dimension(36, 36));
+        btn.setMaximumSize(new Dimension(36, 36));
+        btn.setToolTipText("Preview sample");
+        return btn;
+    }
+
+    private JPanel sampleRow(SampleDropPanel panel) {
+        JPanel row = new JPanel(new BorderLayout(4, 0));
+        row.setOpaque(false);
+        row.add(panel, BorderLayout.CENTER);
+
+        JButton playBtn = createPlayButton();
+        playBtn.addActionListener(e -> toggleSamplePreview(playBtn, panel));
+        row.add(playBtn, BorderLayout.EAST);
+
+        row.setAlignmentX(0);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 52));
+        return row;
+    }
+
+    private void setPlayIcon(JButton btn, boolean playing) {
+        btn.setName(playing ? "stop" : "play");
+        btn.repaint();
+    }
+
+    private void toggleSamplePreview(JButton btn, SampleDropPanel panel) {
+        // If this button is currently playing, stop it
+        if (currentPreviewBtn == btn) {
+            previewPlayer.stop();
+            setPlayIcon(btn, false);
+            currentPreviewBtn = null;
+            return;
+        }
+        // If another button is playing, stop it first
+        if (currentPreviewBtn != null) {
+            previewPlayer.stop();
+            setPlayIcon(currentPreviewBtn, false);
+            currentPreviewBtn = null;
+        }
+        if (panel.getFile() == null || !panel.getFile().exists()) return;
+        try {
+            float[] mono = ReadSound.readSound(panel.getFile().getPath());
+            if (mono == null || mono.length == 0) return;
+            float[][] stereo = {mono, mono};
+            setPlayIcon(btn, true);
+            currentPreviewBtn = btn;
+            previewPlayer.play(stereo, WaveWriter.SAMPLE_RATE, () -> {
+                setPlayIcon(btn, false);
+                currentPreviewBtn = null;
+            });
+        } catch (Exception ex) {
+            // silently ignore preview errors
+        }
     }
 
     // ── Helpers ──
