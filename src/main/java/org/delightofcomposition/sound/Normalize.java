@@ -6,8 +6,10 @@ public class Normalize {
         for (int i = 0; i < sig.length; i++) {
             max = Math.max(Math.abs(sig[i]), max);
         }
-        for (int i = 0; i < sig.length; i++) {
-            sig[i] /= max;
+        if (max > 0) {
+            for (int i = 0; i < sig.length; i++) {
+                sig[i] /= max;
+            }
         }
     }
 }

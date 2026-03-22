@@ -34,53 +34,58 @@ import javax.swing.plaf.basic.BasicSliderUI;
 import javax.swing.plaf.basic.BasicSplitPaneUI;
 
 /**
- * shadcn/ui-inspired dark theme for Swing.
- * Zinc color palette with rounded corners, subtle borders, and clean typography.
+ * shadcn/ui-inspired theme for Swing.
+ * Color palette with rounded corners, subtle borders, and clean typography.
+ * Fields are mutable to support runtime theme switching via {@link ThemePreset}.
  */
 public class Theme {
 
     // ── Zinc palette ──
-    public static final Color ZINC_50  = new Color(250, 250, 250);
-    public static final Color ZINC_100 = new Color(244, 244, 245);
-    public static final Color ZINC_200 = new Color(228, 228, 231);
-    public static final Color ZINC_300 = new Color(212, 212, 216);
-    public static final Color ZINC_400 = new Color(161, 161, 170);
-    public static final Color ZINC_500 = new Color(113, 113, 122);
-    public static final Color ZINC_600 = new Color(82, 82, 91);
-    public static final Color ZINC_700 = new Color(63, 63, 70);
-    public static final Color ZINC_800 = new Color(39, 39, 42);
-    public static final Color ZINC_900 = new Color(24, 24, 27);
-    public static final Color ZINC_950 = new Color(9, 9, 11);
+    public static Color ZINC_50  = new Color(250, 250, 250);
+    public static Color ZINC_100 = new Color(244, 244, 245);
+    public static Color ZINC_200 = new Color(228, 228, 231);
+    public static Color ZINC_300 = new Color(212, 212, 216);
+    public static Color ZINC_400 = new Color(161, 161, 170);
+    public static Color ZINC_500 = new Color(113, 113, 122);
+    public static Color ZINC_600 = new Color(82, 82, 91);
+    public static Color ZINC_700 = new Color(63, 63, 70);
+    public static Color ZINC_800 = new Color(39, 39, 42);
+    public static Color ZINC_900 = new Color(24, 24, 27);
+    public static Color ZINC_950 = new Color(9, 9, 11);
 
-    // ── Semantic tokens (dark mode) ──
-    public static final Color BG            = ZINC_950;
-    public static final Color BG_CARD       = ZINC_900;
-    public static final Color BG_MUTED      = ZINC_800;
-    public static final Color BG_INPUT      = new Color(30, 30, 34);
-    public static final Color BORDER        = ZINC_800;
-    public static final Color BORDER_SUBTLE = new Color(45, 45, 50);
-    public static final Color FG            = ZINC_50;
-    public static final Color FG_MUTED      = ZINC_400;
-    public static final Color FG_DIM        = ZINC_500;
-    public static final Color ACCENT        = new Color(99, 102, 241);   // indigo-500
-    public static final Color ACCENT_HOVER  = new Color(129, 140, 248);  // indigo-400
-    public static final Color ACCENT_MUTED  = new Color(99, 102, 241, 30);
-    public static final Color DESTRUCTIVE   = new Color(239, 68, 68);
-    public static final Color SUCCESS       = new Color(34, 197, 94);
-    public static final Color RING          = new Color(99, 102, 241, 80);
+    // ── Semantic tokens ──
+    public static Color BG            = ZINC_950;
+    public static Color BG_CARD       = ZINC_900;
+    public static Color BG_MUTED      = ZINC_800;
+    public static Color BG_INPUT      = new Color(30, 30, 34);
+    public static Color BORDER        = ZINC_800;
+    public static Color BORDER_SUBTLE = new Color(45, 45, 50);
+    public static Color FG            = ZINC_50;
+    public static Color FG_MUTED      = ZINC_400;
+    public static Color FG_DIM        = ZINC_500;
+    public static Color ACCENT        = new Color(99, 102, 241);
+    public static Color ACCENT_HOVER  = new Color(129, 140, 248);
+    public static Color ACCENT_MUTED  = new Color(99, 102, 241, 30);
+    public static Color DESTRUCTIVE   = new Color(239, 68, 68);
+    public static Color SUCCESS       = new Color(34, 197, 94);
+    public static Color RING          = new Color(99, 102, 241, 80);
+    public static Color ACCENT_FILL   = new Color(99, 102, 241, 30);
+    public static Color SUCCESS_FILL  = new Color(34, 197, 94, 30);
+    public static Color AMBER         = new Color(245, 158, 11);
+    public static Color AMBER_FILL    = new Color(245, 158, 11, 30);
 
     // ── Typography ──
-    public static final Font FONT_BASE    = new Font("Segoe UI", Font.PLAIN, 13);
-    public static final Font FONT_SMALL   = new Font("Segoe UI", Font.PLAIN, 11);
-    public static final Font FONT_LABEL   = new Font("Segoe UI", Font.PLAIN, 12);
-    public static final Font FONT_HEADING = new Font("Segoe UI", Font.BOLD, 13);
-    public static final Font FONT_TITLE   = new Font("Segoe UI", Font.BOLD, 11);
-    public static final Font FONT_MONO    = new Font("Consolas", Font.PLAIN, 12);
+    public static Font FONT_BASE    = new Font("Segoe UI", Font.PLAIN, 13);
+    public static Font FONT_SMALL   = new Font("Segoe UI", Font.PLAIN, 11);
+    public static Font FONT_LABEL   = new Font("Segoe UI", Font.PLAIN, 12);
+    public static Font FONT_HEADING = new Font("Segoe UI", Font.BOLD, 13);
+    public static Font FONT_TITLE   = new Font("Segoe UI", Font.BOLD, 11);
+    public static Font FONT_MONO    = new Font("Consolas", Font.PLAIN, 12);
 
     // ── Dimensions ──
-    public static final int RADIUS = 8;
-    public static final int RADIUS_SM = 6;
-    public static final int RADIUS_LG = 12;
+    public static int RADIUS = 8;
+    public static int RADIUS_SM = 6;
+    public static int RADIUS_LG = 12;
 
     // ── Phone-style spacing ──
     public static final int TOUCH_TARGET = 44;
@@ -89,8 +94,78 @@ public class Theme {
     public static final int LABEL_GAP = 6;
 
     // ── Additional fonts ──
-    public static final Font FONT_VALUE   = new Font("Consolas", Font.PLAIN, 14);
-    public static final Font FONT_SECTION = new Font("Segoe UI", Font.BOLD, 10);
+    public static Font FONT_VALUE   = new Font("Consolas", Font.PLAIN, 14);
+    public static Font FONT_SECTION = new Font("Segoe UI", Font.BOLD, 10);
+
+    // ── Default font/radius values (for presets that use null/-1) ──
+    private static final Font DEF_FONT_BASE    = new Font("Segoe UI", Font.PLAIN, 13);
+    private static final Font DEF_FONT_SMALL   = new Font("Segoe UI", Font.PLAIN, 11);
+    private static final Font DEF_FONT_LABEL   = new Font("Segoe UI", Font.PLAIN, 12);
+    private static final Font DEF_FONT_HEADING = new Font("Segoe UI", Font.BOLD, 13);
+    private static final Font DEF_FONT_TITLE   = new Font("Segoe UI", Font.BOLD, 11);
+    private static final Font DEF_FONT_VALUE   = new Font("Consolas", Font.PLAIN, 14);
+    private static final Font DEF_FONT_SECTION = new Font("Segoe UI", Font.BOLD, 10);
+    private static final int DEF_RADIUS    = 8;
+    private static final int DEF_RADIUS_SM = 6;
+    private static final int DEF_RADIUS_LG = 12;
+
+    // ── Current preset tracking ──
+    private static ThemePreset currentPreset = ThemePreset.DEFAULT_DARK;
+
+    /**
+     * Apply a theme preset: overwrites all mutable static fields, then calls
+     * {@link #install()} to refresh UIManager defaults.
+     */
+    public static void applyTheme(ThemePreset preset) {
+        currentPreset = preset;
+
+        // Zinc scale
+        ZINC_50  = preset.zinc50;  ZINC_100 = preset.zinc100; ZINC_200 = preset.zinc200;
+        ZINC_300 = preset.zinc300; ZINC_400 = preset.zinc400; ZINC_500 = preset.zinc500;
+        ZINC_600 = preset.zinc600; ZINC_700 = preset.zinc700; ZINC_800 = preset.zinc800;
+        ZINC_900 = preset.zinc900; ZINC_950 = preset.zinc950;
+
+        // Backgrounds
+        BG = preset.bg; BG_CARD = preset.bgCard;
+        BG_MUTED = preset.bgMuted; BG_INPUT = preset.bgInput;
+
+        // Borders
+        BORDER = preset.border; BORDER_SUBTLE = preset.borderSubtle;
+
+        // Foregrounds
+        FG = preset.fg; FG_MUTED = preset.fgMuted; FG_DIM = preset.fgDim;
+
+        // Accent
+        ACCENT = preset.accent; ACCENT_HOVER = preset.accentHover;
+        ACCENT_MUTED = preset.accentMuted; ACCENT_FILL = preset.accentFill;
+        RING = preset.ring;
+
+        // Semantic
+        DESTRUCTIVE = preset.destructive;
+        SUCCESS = preset.success; SUCCESS_FILL = preset.successFill;
+        AMBER = preset.amber; AMBER_FILL = preset.amberFill;
+
+        // Fonts (null = use defaults)
+        FONT_BASE    = preset.fontBase    != null ? preset.fontBase    : DEF_FONT_BASE;
+        FONT_SMALL   = preset.fontSmall   != null ? preset.fontSmall   : DEF_FONT_SMALL;
+        FONT_LABEL   = preset.fontLabel   != null ? preset.fontLabel   : DEF_FONT_LABEL;
+        FONT_HEADING = preset.fontHeading != null ? preset.fontHeading : DEF_FONT_HEADING;
+        FONT_TITLE   = preset.fontTitle   != null ? preset.fontTitle   : DEF_FONT_TITLE;
+        FONT_VALUE   = preset.fontValue   != null ? preset.fontValue   : DEF_FONT_VALUE;
+        FONT_SECTION = preset.fontSection != null ? preset.fontSection : DEF_FONT_SECTION;
+
+        // Radii (-1 = use defaults)
+        RADIUS    = preset.radius    >= 0 ? preset.radius    : DEF_RADIUS;
+        RADIUS_SM = preset.radiusSm  >= 0 ? preset.radiusSm  : DEF_RADIUS_SM;
+        RADIUS_LG = preset.radiusLg  >= 0 ? preset.radiusLg  : DEF_RADIUS_LG;
+
+        install();
+    }
+
+    /** Returns the currently active preset. */
+    public static ThemePreset getPreset() {
+        return currentPreset;
+    }
 
     /**
      * Apply the theme globally via UIManager defaults.
@@ -197,11 +272,20 @@ public class Theme {
         UIManager.put("PopupMenu.foreground", FG);
         UIManager.put("PopupMenu.border", new RoundedBorder(BORDER, RADIUS_SM, new Insets(4, 0, 4, 0)));
 
-        // Tooltip
-        UIManager.put("ToolTip.background", BG_CARD);
-        UIManager.put("ToolTip.foreground", FG);
+        // RadioButtonMenuItem
+        UIManager.put("RadioButtonMenuItem.background", BG_CARD);
+        UIManager.put("RadioButtonMenuItem.foreground", FG);
+        UIManager.put("RadioButtonMenuItem.selectionBackground", BG_MUTED);
+        UIManager.put("RadioButtonMenuItem.selectionForeground", FG);
+        UIManager.put("RadioButtonMenuItem.font", FONT_BASE);
+        UIManager.put("RadioButtonMenuItem.checkIcon", null);
+
+        // Tooltip — Radix-style custom UI
+        UIManager.put("ToolTipUI", "org.delightofcomposition.gui.RadixToolTipUI");
+        UIManager.put("ToolTip.background", ZINC_950);
+        UIManager.put("ToolTip.foreground", ZINC_100);
         UIManager.put("ToolTip.font", FONT_SMALL);
-        UIManager.put("ToolTip.border", new RoundedBorder(BORDER, RADIUS_SM, new Insets(4, 8, 4, 8)));
+        UIManager.put("ToolTip.border", BorderFactory.createEmptyBorder());
 
         // Option pane / dialog
         UIManager.put("OptionPane.background", BG_CARD);
@@ -405,7 +489,7 @@ public class Theme {
                     g2.fillRoundRect(0, 0, getWidth(), getHeight(), RADIUS, RADIUS);
                 }
 
-                g2.setColor(isEnabled() ? FG : ZINC_600);
+                g2.setColor(isEnabled() ? getForeground() : ZINC_600);
                 g2.setFont(getFont());
                 FontMetrics fm = g2.getFontMetrics();
                 int tx = (getWidth() - fm.stringWidth(getText())) / 2;
@@ -586,7 +670,6 @@ public class Theme {
      */
     public static void styleScrollPane(JScrollPane sp) {
         sp.setBorder(BorderFactory.createEmptyBorder());
-        sp.getViewport().setBackground(BG);
         JScrollBar vbar = sp.getVerticalScrollBar();
         JScrollBar hbar = sp.getHorizontalScrollBar();
         styleScrollBar(vbar);

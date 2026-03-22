@@ -29,8 +29,55 @@ public class WaveWriter {
         spis = new StereoPcmInputStream();
         df = new float[2][length];
         fileName = name + ".wav";
+    }
 
-        // render();
+    /**
+     * Constructor with explicit length in samples (avoids 660MB default allocation).
+     */
+    public WaveWriter(String name, int lengthInSamples) {
+        spis = new StereoPcmInputStream();
+        this.length = lengthInSamples;
+        df = new float[2][length];
+        fileName = name + ".wav";
+    }
+
+    /**
+     * Returns the stereo buffer after normalizing and trimming silence,
+     * without writing to disk. Useful for in-app playback.
+     */
+    public float[][] getBuffer() {
+        float peak = 0;
+        for (int i = 0; i < df[0].length; i++) {
+            peak = Math.max(peak, Math.abs(df[0][i]));
+            peak = Math.max(peak, Math.abs(df[1][i]));
+        }
+        if (peak == 0) return new float[2][0];
+
+        float[][] out = new float[2][df[0].length];
+        for (int i = 0; i < df[0].length; i++) {
+            out[0][i] = df[0][i] / peak;
+            out[1][i] = df[1][i] / peak;
+        }
+
+        // trim trailing silence
+        for (int i = out[0].length - 1; i >= 0; i--) {
+            if (out[0][i] != 0 || out[1][i] != 0) {
+                out[0] = Arrays.copyOfRange(out[0], 0, i + 1);
+                out[1] = Arrays.copyOfRange(out[1], 0, i + 1);
+                break;
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Renders to a specific file path.
+     */
+    public void renderToFile(String path) {
+        String origName = fileName;
+        fileName = path;
+        render();
+        fileName = origName;
     }
 
     // render wave file

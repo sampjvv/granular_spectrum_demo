@@ -35,7 +35,7 @@ public class Envelope {
     double duration;
     int lastX = 0;
     Timer clock;
-     ArrayList<int[]> coords;
+    public ArrayList<int[]> coords;
     boolean block;
     File file;
     public int type;// 0 = continuous, 1 = linear

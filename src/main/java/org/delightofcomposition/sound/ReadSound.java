@@ -43,14 +43,14 @@ public class ReadSound {
             // System.out.println(audioInputStream.getFormat().getEncoding());
             // System.out.println(audioInputStream.getFormat());
 
-            if (bytesPerFrame != 2) {
-                if (bytesPerFrame == 3) {
-                    System.out.println("Attempting to read 24-bit format");
-                    is24bit = true;
-                } else {
-                    System.out.println("FILE IS NOT 16-bit or 24-bit format");
-                    return null;
-                }
+            int channels = audioFormat.getChannels();
+            int bytesPerSample = audioFormat.getSampleSizeInBits() / 8;
+            if (bytesPerSample == 3) {
+                System.out.println("Attempting to read 24-bit format");
+                is24bit = true;
+            } else if (bytesPerSample != 2) {
+                System.out.println("FILE IS NOT 16-bit or 24-bit format");
+                return null;
             }
             soundData = new byte[(int) (audioInputStream.getFrameLength() * bytesPerFrame)];
             normalizedData = new float[(int) audioInputStream.getFrameLength()];
@@ -63,47 +63,43 @@ public class ReadSound {
         if (is24bit) {
             normalizedData = decode24bit(soundData, normalizedData);
         } else {
-             // Corrected 16-bit audio decoding section
-            int t = 0;
+             // 16-bit audio decoding with stereo-to-mono mixdown
+            int channels = audioFormat.getChannels();
+            int bytesPerFrame = channels * 2; // 2 bytes per sample * channels
             float max = 0;
-            int[] data = new int[normalizedData.length];
+            int frameCount = soundData.length / bytesPerFrame;
+            normalizedData = new float[frameCount];
 
-            for (int i = 0; i < soundData.length; i += 2) {
-                int b1, b2;
+            for (int frame = 0; frame < frameCount; frame++) {
+                float mixedSample = 0;
+                for (int ch = 0; ch < channels; ch++) {
+                    int offset = frame * bytesPerFrame + ch * 2;
+                    int b1, b2;
 
-                if (audioFormat.isBigEndian()) {
-                    // Big-endian: most significant byte first
-                    b1 = soundData[i]; // MSB
-                    b2 = soundData[i + 1]; // LSB
-                } else {
-                    // Little-endian: least significant byte first
-                    b1 = soundData[i + 1]; // MSB
-                    b2 = soundData[i]; // LSB
+                    if (audioFormat.isBigEndian()) {
+                        b1 = soundData[offset]; // MSB
+                        b2 = soundData[offset + 1]; // LSB
+                    } else {
+                        b1 = soundData[offset + 1]; // MSB
+                        b2 = soundData[offset]; // LSB
+                    }
+
+                    int unsignedB1 = b1 & 0xFF;
+                    int unsignedB2 = b2 & 0xFF;
+                    int dataPoint = (unsignedB1 << 8) | unsignedB2;
+                    if (dataPoint > 32767) {
+                        dataPoint -= 65536;
+                    }
+                    mixedSample += dataPoint;
                 }
-
-                // Convert bytes to unsigned values (0-255)
-                int unsignedB1 = b1 & 0xFF;
-                int unsignedB2 = b2 & 0xFF;
-
-                // Combine bytes into 16-bit value
-                int dataPoint = (unsignedB1 << 8) | unsignedB2;
-
-                // Convert from unsigned 16-bit to signed 16-bit (two's complement)
-                if (dataPoint > 32767) {
-                    dataPoint -= 65536;
-                }
-
-                max = Math.max(max, Math.abs(dataPoint));
-                data[t] = dataPoint;
-                normalizedData[t++] = (float) dataPoint;
+                mixedSample /= channels;
+                max = Math.max(max, Math.abs(mixedSample));
+                normalizedData[frame] = mixedSample;
             }
 
             // Normalize to [-1, 1] range
             for (int i = 0; i < normalizedData.length; i++) {
                 normalizedData[i] /= max;
-                if (Math.abs(normalizedData[i]) > 1) {
-                    System.out.println("ERROR: " + normalizedData[i]);
-                }
             }
         }
 

@@ -69,9 +69,6 @@ public class StepperControl extends JPanel {
     private JTextField createValueField() {
         JTextField f = new JTextField(formatValue());
         f.setFont(Theme.FONT_VALUE);
-        f.setBackground(Theme.BG_INPUT);
-        f.setForeground(Theme.FG);
-        f.setCaretColor(Theme.FG);
         f.setHorizontalAlignment(JTextField.CENTER);
         f.setBorder(javax.swing.BorderFactory.createCompoundBorder(
                 new Theme.RoundedBorder(Theme.BORDER, Theme.RADIUS_SM, new java.awt.Insets(0, 0, 0, 0)),

@@ -54,7 +54,6 @@ public class ParameterPanel extends JPanel implements Scrollable {
     public ParameterPanel(SynthParameters params) {
         this.params = params;
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-        setBackground(Theme.BG);
         setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
 
         add(buildSamplesSection());
@@ -403,9 +402,19 @@ public class ParameterPanel extends JPanel implements Scrollable {
     // ── Helpers ──
 
     private JPanel sectionCard() {
-        JPanel card = new JPanel();
+        JPanel card = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(Theme.BG_CARD);
+                g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
+                        Theme.RADIUS_LG, Theme.RADIUS_LG);
+                g2.dispose();
+            }
+        };
+        card.setOpaque(false);
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
-        card.setBackground(Theme.BG_CARD);
         card.setBorder(BorderFactory.createCompoundBorder(
                 new Theme.RoundedBorder(Theme.BORDER, Theme.RADIUS_LG, new Insets(0, 0, 0, 0)),
                 BorderFactory.createEmptyBorder(16, 16, 16, 16)));
@@ -415,9 +424,6 @@ public class ParameterPanel extends JPanel implements Scrollable {
     private static JTextField styledTextField(String text) {
         JTextField field = new JTextField(text);
         field.setFont(Theme.FONT_MONO);
-        field.setBackground(Theme.BG_INPUT);
-        field.setForeground(Theme.FG);
-        field.setCaretColor(Theme.FG);
         field.setBorder(BorderFactory.createCompoundBorder(
                 new Theme.RoundedBorder(Theme.BORDER, Theme.RADIUS_SM, new Insets(0, 0, 0, 0)),
                 BorderFactory.createEmptyBorder(8, 10, 8, 10)));

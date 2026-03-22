@@ -15,43 +15,72 @@ public class SimpleSynth extends Synth {
     double[] sample;
 
     public SimpleSynth() {
-        initialize("resources/4.wav", 394);
-        useReverb = true;
+        initialize("resources/4.wav", 394, true, 0.3, "resources/cathedral.wav");
     }
 
     public SimpleSynth(String samplePath, double freq) {
-        initialize(samplePath, freq);
-        useReverb = true;
+        initialize(samplePath, freq, true, 0.3, "resources/cathedral.wav");
     }
 
-    public void initialize(String samplePath, double freq) {
+    public SimpleSynth(String samplePath, double freq, boolean useReverb, double reverbMix, String irPath) {
+        initialize(samplePath, freq, useReverb, reverbMix, irPath);
+    }
+
+    private double reverbMix = 0.3;
+
+    public void initialize(String samplePath, double freq, boolean useReverb, double reverbMix, String irPath) {
         origFreq = freq;
+        this.useReverb = useReverb;
+        this.reverbMix = reverbMix;
         sample = ReadSound.readSoundDoubles(samplePath);
         Normalize.normalize(sample);
-        wetSig = Reverb.generateWet(sample);
-        sample = Arrays.copyOf(sample, wetSig.length);
+        if (useReverb) {
+            wetSig = Reverb.generateWet(sample, irPath);
+            sample = Arrays.copyOf(sample, wetSig.length);
+        }
     }
 
     public double[] reverb(double amp) {
-        return reverb(amp, 0.3, sample, wetSig);
+        return reverb(amp, reverbMix, sample, wetSig);
     }
 
     public double[] synthAlg(double freq, double amp) {
-        double[] reverb = useReverb ? reverb(amp) : sample;// amp dependent reverb
+        // Inline reverb mix into interpolation to avoid allocating a full
+        // wet.length intermediate array on every grain call.
+        double[] src = sample;
+        int srcLen = src.length;
+        double mix = 0;
+        if (useReverb) {
+            mix = (1 - amp) * reverbMix;
+            srcLen = wetSig.length;
+        }
+        double invMix = 1 - mix;
 
-        double[] processed = new double[(int) (reverb.length * origFreq / freq)];
+        double[] processed = new double[(int) (srcLen * origFreq / freq)];
 
-        for (int i = 0; i < processed.length && i < processed.length; i++) {
+        for (int i = 0; i < processed.length; i++) {
             double exInd = i * freq / origFreq;
             int index = (int) exInd;
             double fract = exInd - index;
-            double frame1 = reverb[index];
-            double frame2 = frame1;
-            if (index + 1 < reverb.length)
-                frame2 = reverb[index + 1];
-            double frame = frame1 * (1 - fract) + frame2 * fract;
-            frame *= amp;
-            processed[i] += frame;
+
+            double frame1, frame2;
+            if (useReverb) {
+                double dry1 = src[index];
+                double wet1 = wetSig[index];
+                frame1 = invMix * dry1 + mix * wet1;
+                if (index + 1 < srcLen) {
+                    double dry2 = src[index + 1];
+                    double wet2 = wetSig[index + 1];
+                    frame2 = invMix * dry2 + mix * wet2;
+                } else {
+                    frame2 = frame1;
+                }
+            } else {
+                frame1 = src[index];
+                frame2 = (index + 1 < srcLen) ? src[index + 1] : frame1;
+            }
+
+            processed[i] = (frame1 * (1 - fract) + frame2 * fract) * amp;
         }
         return processed;
     }

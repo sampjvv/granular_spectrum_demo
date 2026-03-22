@@ -2,6 +2,11 @@ package org.delightofcomposition;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Random;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 import org.delightofcomposition.envelopes.Envelope;
 import org.delightofcomposition.sound.FFT;
@@ -44,141 +49,134 @@ public class Demo {
      */
 
     public static double[] demo(double[] fullSound, Envelope probEnv, Envelope mixEnv) {
+        SynthParameters defaults = new SynthParameters();
+        defaults.probEnv = probEnv;
+        defaults.mixEnv = mixEnv;
+        return demo(fullSound, defaults, null);
+    }
 
-        double[] outSig = new double[WaveWriter.SAMPLE_RATE * 30 * 60];
+    /**
+     * Cancellation flag — set to true from another thread to abort rendering.
+     */
+    public static volatile boolean cancelled = false;
+
+    /**
+     * Fully parameterized overload. All constants come from params.
+     * progress callback receives percentage (0-100). Can be null.
+     */
+    public static double[] demo(double[] fullSound, SynthParameters params, Consumer<Integer> progress) {
+        cancelled = false;
+
+        // Allocate output buffer sized to source + generous margin for reverb tail
+        int outLength = fullSound.length + WaveWriter.SAMPLE_RATE * 30; // 30s margin
+        double[] outSig = new double[outLength];
 
         // A synth to make the grains
-        Synth synth = new SimpleSynth("resources/bell.wav", 1287);
+        Synth synth = new SimpleSynth(
+                params.grainFile.getPath(),
+                params.grainReferenceFreq,
+                params.useReverb,
+                params.synthReverbMix,
+                params.impulseResponseFile.getPath());
 
-        // number of samples within a window
-        // larger windows = greater spectral accuracy (lower frequencies are included)
-        // but also less accurate changes in spectrum (lower resolution horizontally,
-        // higher resolution vertically)
-        int windowSize = (int) Math.pow(2, 14);
+        int windowSize = params.getWindowSize();
+        double controlRate = params.controlRate;
+        double amplitudeThreshold = params.amplitudeThreshold;
+        int grainsPerPeak = params.grainsPerPeak;
+        Envelope probEnv = params.probEnv;
+        Envelope mixEnv = params.mixEnv;
+        String irPath = params.impulseResponseFile.getPath();
 
-        // overlapping windows spaced a tenth of a second apart
-        double controlRate = 0.1;
+        double totalDuration = fullSound.length / (double) WaveWriter.SAMPLE_RATE;
+        final double[] sourceSound = fullSound;
 
-        // move across the duration of the sample in tenth of a second increments
-        // 'time' is a 'cursor' at the center of each window
-        for (double time = controlRate; time < (fullSound.length / (double) WaveWriter.SAMPLE_RATE)
-                - controlRate; time += controlRate) {
+        // Build list of window times
+        List<Double> windowTimes = new ArrayList<>();
+        for (double time = controlRate; time < totalDuration - controlRate; time += controlRate) {
+            windowTimes.add(time);
+        }
+        int totalWindows = windowTimes.size();
 
-            // start the window a little before the 'time' cursor
-            // end it a little after
-            int fftStart = (int) (time * WaveWriter.SAMPLE_RATE) - windowSize / 2;
-            int fftEnd = (int) (time * WaveWriter.SAMPLE_RATE) + windowSize / 2;
-            fftStart = Math.max(0, fftStart); // don't let the window bounds go beyond the bounds of the sample
-            fftEnd = Math.min(fullSound.length, fftEnd);
-            double[] fftSample = Arrays.copyOfRange(fullSound, fftStart, fftEnd);
+        // Parallel rendering
+        int nThreads = Runtime.getRuntime().availableProcessors();
+        ExecutorService pool = Executors.newFixedThreadPool(nThreads);
+        AtomicInteger completedWindows = new AtomicInteger(0);
 
-            // apply a hamming-like window function to prevent spectral leakage
-            // in other words, this gives us more accurate spectrographs
-            for (int i = 0; i < fftSample.length; i++) {
-                double windowFunction = (2 - (Math.cos(Math.PI * 2 * i / (double) (windowSize - 1)) + 1)) / 2.0;
-                fftSample[i] *= windowFunction;
-            }
+        try {
+            int batchSize = (totalWindows + nThreads - 1) / nThreads;
+            List<Future<double[]>> futures = new ArrayList<>();
 
-            // get the spectrograph for the window
-            ArrayList<double[]> spec = FFT.getSpectrumWPhase(fftSample, true);
+            for (int b = 0; b < nThreads; b++) {
+                int from = b * batchSize;
+                int to = Math.min(from + batchSize, totalWindows);
+                if (from >= totalWindows) break;
 
-            // define the beginning and ending of the time span to cover 0.2 seconds
-            // (less than the segment used for calculating the spectrograph at time, which
-            // leads to more accurate spectrographs, but twice the the interval at which
-            // the cursor is incremented, so that the windows overlap)
-            int firstSoundingFrame = (int) ((time - controlRate) * (double) WaveWriter.SAMPLE_RATE);
-            int lastFrame = (int) ((time + controlRate) * (double) WaveWriter.SAMPLE_RATE);
+                final int batchFrom = from;
+                final int batchTo = to;
 
-            // used later
-            int totSounding = lastFrame - firstSoundingFrame;
-            int index = 1;
+                futures.add(pool.submit(() -> {
+                    double[] localBuf = new double[outLength];
+                    for (int idx = batchFrom; idx < batchTo; idx++) {
+                        if (cancelled) return localBuf;
 
-            // visual feedback
-            int p = (int) (100 * time / (fullSound.length / (double) WaveWriter.SAMPLE_RATE));
-            ProgressBar.printProgressBar(p, 100, "Rendering Granular Spectrum");
+                        double time = windowTimes.get(idx);
+                        Random rng = new Random(idx);
 
-            // iterate across the entire spectrum from the lowest frequency (1 hz) bin
-            // to the highest (the sample rate 48 khz)
-            while (index < spec.size() - 1) {
+                        processWindow(time, sourceSound, synth, windowSize,
+                                controlRate, amplitudeThreshold, grainsPerPeak,
+                                probEnv, localBuf, rng);
 
-                // when the amp at 'index' is higher
-                // than the amps right below and right above index,
-                // this is a peak in the spectrograph
-                double peakFreq = 0;
-                double peakAmp = 0;
-                while (index < spec.size() - 1
-                        && peakFreq == 0) {
-                    if (spec.get(index)[1] > 0.05
-                            && spec.get(index)[1] > spec.get(index - 1)[1]
-                            && spec.get(index)[1] > spec.get(index + 1)[1]) {
-                        peakAmp = spec.get(index)[1];
-                        peakFreq = spec.get(index)[0] * WaveWriter.SAMPLE_RATE;
-                    }
-                    index++;
-                }
-
-                // there was no peak, we probaby just ran out of data
-                if (peakAmp == 0)
-                    continue;
-
-                // write up to ten grains within the window (0.2 seconds)
-                // randomize the attack time within this window
-                // let probEnv control the probability that a grain is written
-                // (density)
-                for (int i = 0; i < 10; i++) {
-
-                    double n = totSounding * Math.random();// randomize attack time
-                    int t = (int) (firstSoundingFrame + n);
-
-                    // probability that a grain is written
-                    double prob = probEnv.getValue(t / (double) fullSound.length);
-
-                    if (Math.random() < prob) {
-                        double[] tone = synth.note(peakFreq, peakAmp);
-                        for (int j = 0; j < tone.length; j++) {
-                            outSig[j + t] += tone[j];// write grain
+                        int done = completedWindows.incrementAndGet();
+                        if (progress != null) {
+                            progress.accept((int) (100.0 * done / totalWindows));
                         }
                     }
+                    return localBuf;
+                }));
+            }
+
+            // Merge thread-local buffers
+            for (Future<double[]> f : futures) {
+                double[] buf = f.get();
+                if (cancelled) return null;
+                for (int i = 0; i < outSig.length; i++) {
+                    outSig[i] += buf[i];
                 }
+            }
+        } catch (InterruptedException | ExecutionException e) {
+            return null;
+        } finally {
+            pool.shutdownNow();
+        }
+
+        if (cancelled) return null;
+
+        int origLen = fullSound.length;
+
+        // apply reverb to original sample
+        double[] wet = params.useReverb ? Reverb.generateWet(fullSound, irPath) : fullSound;
+        Normalize.normalize(fullSound);
+        if (params.useReverb) {
+            Normalize.normalize(wet);
+            fullSound = Arrays.copyOf(fullSound, Math.max(wet.length, fullSound.length));
+            double reverbMix = params.sourceReverbMix;
+            for (int i = 0; i < fullSound.length; i++) {
+                fullSound[i] = reverbMix * wet[i] + (1 - reverbMix) * fullSound[i];
             }
         }
 
-        // we need to use the original length of the sample to scale
-        // the mix envelope, even after the length of the sample is
-        // extended in the next block of code to include a little reverb tail
-        int origLen = fullSound.length;
-
-        // apply a little reverb to the original sample
-        double[] wet = Reverb.generateWet(fullSound);
-        Normalize.normalize(fullSound);
-        Normalize.normalize(wet);
-        fullSound = Arrays.copyOf(fullSound, Math.max(wet.length, fullSound.length));
-        double reverbMix = 0.2;
-        for (int i = 0; i < fullSound.length; i++) {
-            // overwrite dry sig with mix
-            fullSound[i] = reverbMix * wet[i] + (1 - reverbMix) * fullSound[i];
-        }
-
-        // important to normalize at this point prior to mixing, so
-        // that mix between original cello sample and granular
-        // spectrum will turn out balanced
         Normalize.normalize(outSig);
         Normalize.normalize(fullSound);
 
-        // mix granular sound (now store)
         for (int i = 0; i < fullSound.length; i++) {
             double percComplete = i / (double) origLen;
             double mix = mixEnv.getValue(percComplete);
-            // System.out.println("MIX: " + mix);// sanity check
-
-            // mix original outsig (granular spectrum) with cello sample
-            // overwrite original outsig with mix
             outSig[i] = (float) (((1 - mix) * outSig[i]) + (mix * fullSound[i]));
         }
 
-        // // clear out the rest of the signal
         outSig = Arrays.copyOf(outSig, fullSound.length);
 
+        if (progress != null) progress.accept(100);
         return outSig;
     }
 
@@ -199,6 +197,61 @@ public class Demo {
         Envelope probEnv = new Envelope(new double[] { 0, 0.6, 0.8, 0.9, 0.91 }, new double[] { 0, 0.1, 1, 1, 0 });
         Envelope mixEnv = new Envelope(new double[] { 0, 0.7, 0.9 }, new double[] { 0, 0, 1 });
         return demo(fullSound, probEnv, mixEnv);
+    }
+
+    private static void processWindow(double time, double[] fullSound, Synth synth,
+            int windowSize, double controlRate, double amplitudeThreshold,
+            int grainsPerPeak, Envelope probEnv, double[] outBuf, Random rng) {
+
+        int fftStart = (int) (time * WaveWriter.SAMPLE_RATE) - windowSize / 2;
+        int fftEnd = (int) (time * WaveWriter.SAMPLE_RATE) + windowSize / 2;
+        fftStart = Math.max(0, fftStart);
+        fftEnd = Math.min(fullSound.length, fftEnd);
+        double[] fftSample = Arrays.copyOfRange(fullSound, fftStart, fftEnd);
+
+        for (int i = 0; i < fftSample.length; i++) {
+            double windowFunction = (2 - (Math.cos(Math.PI * 2 * i / (double) (windowSize - 1)) + 1)) / 2.0;
+            fftSample[i] *= windowFunction;
+        }
+
+        double[][] spec = FFT.getTransformRaw(fftSample);
+        int halfLen = spec[0].length / 2 + 1;
+
+        int firstSoundingFrame = (int) ((time - controlRate) * (double) WaveWriter.SAMPLE_RATE);
+        int lastFrame = (int) ((time + controlRate) * (double) WaveWriter.SAMPLE_RATE);
+        int totSounding = lastFrame - firstSoundingFrame;
+        int index = 1;
+
+        while (index < halfLen - 1) {
+            double peakFreq = 0;
+            double peakAmp = 0;
+            while (index < halfLen - 1 && peakFreq == 0) {
+                if (spec[0][index] > amplitudeThreshold
+                        && spec[0][index] > spec[0][index - 1]
+                        && spec[0][index] > spec[0][index + 1]) {
+                    peakAmp = spec[0][index];
+                    peakFreq = index / (double) spec[0].length * WaveWriter.SAMPLE_RATE;
+                }
+                index++;
+            }
+
+            if (peakAmp == 0)
+                continue;
+
+            for (int i = 0; i < grainsPerPeak; i++) {
+                double n = totSounding * rng.nextDouble();
+                int t = (int) (firstSoundingFrame + n);
+
+                double prob = probEnv.getValue(t / (double) fullSound.length);
+
+                if (rng.nextDouble() < prob) {
+                    double[] tone = synth.note(peakFreq, peakAmp);
+                    for (int j = 0; j < tone.length && (j + t) < outBuf.length; j++) {
+                        outBuf[j + t] += tone[j];
+                    }
+                }
+            }
+        }
     }
 
     public static double[] demoCrispAttack(double[] fullSound) {

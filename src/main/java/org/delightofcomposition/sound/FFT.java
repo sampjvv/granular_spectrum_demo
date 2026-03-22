@@ -15,6 +15,9 @@ import java.util.Comparator;
  */
 public class FFT
 {
+    private static final FastFourierTransformer TRANSFORMER =
+            new FastFourierTransformer(DftNormalization.STANDARD);
+
     public static ArrayList<double[]> getSpectrumWPhase(double[] data, boolean normalize){
         double[][] trans = getTransformationWPhase(data);
 
@@ -103,13 +106,23 @@ public class FFT
         return output;
     }
 
+    public static double[][] getTransformRaw(double[] data) {
+        double[][] trans = getTransformationWPhase(data);
+        int halfLen = trans[0].length / 2 + 1;
+        double max = 0;
+        for (int i = 0; i < halfLen; i++) max = Math.max(max, trans[0][i]);
+        if (max > 0) {
+            for (int i = 0; i < halfLen; i++) trans[0][i] /= max;
+        }
+        return trans;
+    }
+
     public static double[][] transformWPhase(double[] input) 
     {   
 
         double[][] tempConversion = new double[2][input.length];
-        FastFourierTransformer transformer = new FastFourierTransformer(DftNormalization.STANDARD);
-        try {           
-            Complex[] complx = transformer.transform(input, TransformType.FORWARD);
+        try {
+            Complex[] complx = TRANSFORMER.transform(input, TransformType.FORWARD);
 
             for (int i = 0; i < complx.length; i++) {               
                 double rr = (complx[i].getReal());
