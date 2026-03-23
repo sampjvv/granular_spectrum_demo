@@ -1,10 +1,13 @@
 package org.delightofcomposition.gui;
 
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.File;
 
 import javax.swing.AbstractAction;
@@ -14,23 +17,26 @@ import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
-import javax.swing.JSplitPane;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.KeyStroke;
 import javax.swing.ButtonGroup;
 import javax.swing.JRadioButtonMenuItem;
 import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
+import javax.swing.SwingWorker;
+import javax.swing.Timer;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
 import org.delightofcomposition.RenderController;
 import org.delightofcomposition.SynthParameters;
+import org.delightofcomposition.realtime.LiveMidiController;
 import org.delightofcomposition.sound.AudioPlayer;
 import org.delightofcomposition.sound.WaveWriter;
 
@@ -39,11 +45,15 @@ import org.delightofcomposition.sound.WaveWriter;
  */
 public class MainWindow extends JFrame {
 
+    private static final String WAV_MODE = "WAV";
+    private static final String LIVE_MODE = "Live";
+
     private final SynthParameters params = new SynthParameters();
     private final JProgressBar progressBar;
     private final AudioPlayer player = new AudioPlayer();
     private final RenderController renderController;
 
+    // WAV mode controls
     private JButton renderBtn;
     private JButton playBtn;
     private JButton stopBtn;
@@ -57,12 +67,29 @@ public class MainWindow extends JFrame {
     private JButton helpBtn;
     private JPanel toolbar;
 
+    // Live mode controls
+    private LiveMidiController liveController;
+    private SegmentedControl modeSwitch;
+    private JPanel toolbarCards;
+    private JPanel contentCards;
+    private CardLayout toolbarCardLayout;
+    private CardLayout contentCardLayout;
+    private LiveParameterPanel liveParamPanel;
+    private LiveMonitorPanel liveMonitorPanel;
+    private JButton liveStartBtn;
+    private JButton liveStopBtn;
+    private JLabel midiStatusLabel;
+    private JLabel voiceCountLabel;
+    private Timer liveStatusTimer;
+
     public MainWindow() {
         super("Granular Spectrum Synthesizer");
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         setSize(1200, 800);
         setLocationRelativeTo(null);
         getContentPane().setBackground(Theme.BG);
+
+        liveController = new LiveMidiController();
 
         progressBar = Theme.styledProgressBar();
 
@@ -105,6 +132,16 @@ public class MainWindow extends JFrame {
         stopBtn.setEnabled(true);
         exportBtn.setEnabled(false);
         progressBar.setString("Ready");
+
+        // Window close: stop live engine if running
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                stopLiveMode();
+                dispose();
+                System.exit(0);
+            }
+        });
     }
 
     private void buildMenuBar() {
@@ -132,7 +169,10 @@ public class MainWindow extends JFrame {
         fileMenu.addSeparator();
 
         JMenuItem exitItem = new JMenuItem("Exit");
-        exitItem.addActionListener(e -> System.exit(0));
+        exitItem.addActionListener(e -> {
+            stopLiveMode();
+            System.exit(0);
+        });
         fileMenu.add(exitItem);
 
         menuBar.add(fileMenu);
@@ -175,33 +215,50 @@ public class MainWindow extends JFrame {
     }
 
     private void buildToolbar() {
-        toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 8));
+        toolbar = new JPanel(new BorderLayout(8, 0));
         toolbar.setBackground(Theme.BG_CARD);
-        toolbar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, Theme.BORDER));
+        toolbar.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, Theme.BORDER),
+                BorderFactory.createEmptyBorder(8, 8, 8, 8)));
+
+        // Mode switch — fixed width on the left
+        modeSwitch = new SegmentedControl(new String[]{WAV_MODE, LIVE_MODE}, 0);
+        modeSwitch.setPreferredSize(new Dimension(120, 34));
+        modeSwitch.addChangeListener(e -> onModeSwitch());
+        toolbar.add(modeSwitch, BorderLayout.WEST);
+
+        // CardLayout for toolbar buttons
+        toolbarCardLayout = new CardLayout();
+        toolbarCards = new JPanel(toolbarCardLayout);
+        toolbarCards.setOpaque(false);
+
+        // WAV toolbar
+        JPanel wavToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        wavToolbar.setOpaque(false);
 
         renderBtn = Theme.primaryButton("Render");
         renderBtn.setPreferredSize(new Dimension(90, 34));
         renderBtn.setToolTipText("Render the granular spectrum (Ctrl+R)");
         renderBtn.addActionListener(e -> doRender());
-        toolbar.add(renderBtn);
+        wavToolbar.add(renderBtn);
 
         playBtn = Theme.secondaryButton("Play");
         playBtn.setPreferredSize(new Dimension(80, 34));
         playBtn.setToolTipText("Play rendered audio (Space)");
         playBtn.addActionListener(e -> doPlay());
-        toolbar.add(playBtn);
+        wavToolbar.add(playBtn);
 
         stopBtn = Theme.ghostButton("Stop");
         stopBtn.setPreferredSize(new Dimension(70, 34));
         stopBtn.setToolTipText("Stop playback or rendering (Escape)");
         stopBtn.addActionListener(e -> doStop());
-        toolbar.add(stopBtn);
+        wavToolbar.add(stopBtn);
 
         exportBtn = Theme.secondaryButton("Export WAV");
         exportBtn.setPreferredSize(new Dimension(110, 34));
         exportBtn.setToolTipText("Export rendered audio to WAV file");
         exportBtn.addActionListener(e -> doExport());
-        toolbar.add(exportBtn);
+        wavToolbar.add(exportBtn);
 
         helpBtn = Theme.ghostButton("?");
         helpBtn.setPreferredSize(new Dimension(34, 34));
@@ -211,18 +268,63 @@ public class MainWindow extends JFrame {
             hm.setHelpMode(!hm.isHelpMode());
             helpBtn.setForeground(hm.isHelpMode() ? Theme.ACCENT : Theme.FG);
         });
-        toolbar.add(helpBtn);
+        wavToolbar.add(helpBtn);
 
-        toolbar.add(Box.createHorizontalStrut(12));
-
+        wavToolbar.add(Box.createHorizontalStrut(12));
         progressBar.setPreferredSize(new Dimension(300, 20));
-        toolbar.add(progressBar);
+        wavToolbar.add(progressBar);
+
+        toolbarCards.add(wavToolbar, WAV_MODE);
+
+        // Live toolbar
+        JPanel liveToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        liveToolbar.setOpaque(false);
+
+        liveStartBtn = Theme.primaryButton("Start");
+        liveStartBtn.setPreferredSize(new Dimension(80, 34));
+        liveStartBtn.setToolTipText("Start live MIDI playback");
+        liveStartBtn.addActionListener(e -> startLiveMode());
+        liveToolbar.add(liveStartBtn);
+
+        liveStopBtn = Theme.ghostButton("Stop");
+        liveStopBtn.setPreferredSize(new Dimension(70, 34));
+        liveStopBtn.setToolTipText("Stop live MIDI playback");
+        liveStopBtn.setEnabled(false);
+        liveStopBtn.addActionListener(e -> stopLiveMode());
+        liveToolbar.add(liveStopBtn);
+
+        JButton liveHelpBtn = Theme.ghostButton("?");
+        liveHelpBtn.setPreferredSize(new Dimension(34, 34));
+        liveHelpBtn.setToolTipText("Toggle help tooltips");
+        liveHelpBtn.addActionListener(e -> {
+            HelpManager hm = HelpManager.getInstance();
+            hm.setHelpMode(!hm.isHelpMode());
+            liveHelpBtn.setForeground(hm.isHelpMode() ? Theme.ACCENT : Theme.FG);
+        });
+        liveToolbar.add(liveHelpBtn);
+
+        liveToolbar.add(Box.createHorizontalStrut(12));
+
+        midiStatusLabel = Theme.valueLabel("MIDI: —");
+        liveToolbar.add(midiStatusLabel);
+
+        liveToolbar.add(Box.createHorizontalStrut(12));
+
+        voiceCountLabel = Theme.valueLabel("");
+        liveToolbar.add(voiceCountLabel);
+
+        toolbarCards.add(liveToolbar, LIVE_MODE);
+
+        toolbar.add(toolbarCards, BorderLayout.CENTER);
 
         add(toolbar, BorderLayout.NORTH);
     }
 
     private void buildMainContent() {
-        // Left panel: parameter controls (scrollable)
+        contentCardLayout = new CardLayout();
+        contentCards = new JPanel(contentCardLayout);
+
+        // ── WAV content (existing layout) ──
         parameterPanel = new ParameterPanel(params);
         JScrollPane leftScroll = new JScrollPane(parameterPanel);
         leftScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
@@ -230,7 +332,6 @@ public class MainWindow extends JFrame {
         leftScroll.getVerticalScrollBar().setUnitIncrement(16);
         Theme.styleScrollPane(leftScroll);
 
-        // Right panel: envelope editors + waveform display in vertical split
         envelopePanel = new EnvelopeEditorPanel(params);
         waveformDisplay = new WaveformDisplay();
 
@@ -245,12 +346,144 @@ public class MainWindow extends JFrame {
         rightSplit.setResizeWeight(0.7);
         rightSplit.setBorder(BorderFactory.createEmptyBorder());
 
-        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftScroll, rightSplit);
-        splitPane.setDividerLocation(340);
-        splitPane.setResizeWeight(0.0);
-        splitPane.setBorder(BorderFactory.createEmptyBorder());
+        JSplitPane wavSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftScroll, rightSplit);
+        wavSplit.setDividerLocation(340);
+        wavSplit.setResizeWeight(0.0);
+        wavSplit.setBorder(BorderFactory.createEmptyBorder());
 
-        add(splitPane, BorderLayout.CENTER);
+        contentCards.add(wavSplit, WAV_MODE);
+
+        // ── Live content ──
+        liveParamPanel = new LiveParameterPanel(params);
+        JScrollPane liveLeftScroll = new JScrollPane(liveParamPanel);
+        liveLeftScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        liveLeftScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        liveLeftScroll.getVerticalScrollBar().setUnitIncrement(16);
+        liveLeftScroll.getViewport().setBackground(Theme.BG);
+        Theme.styleScrollPane(liveLeftScroll);
+
+        liveMonitorPanel = new LiveMonitorPanel();
+        JScrollPane liveRightScroll = new JScrollPane(liveMonitorPanel);
+        liveRightScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        liveRightScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        liveRightScroll.getVerticalScrollBar().setUnitIncrement(16);
+        liveRightScroll.getViewport().setBackground(Theme.BG);
+        Theme.styleScrollPane(liveRightScroll);
+
+        JSplitPane liveSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
+                liveLeftScroll, liveRightScroll);
+        liveSplit.setDividerLocation(340);
+        liveSplit.setResizeWeight(0.0);
+        liveSplit.setBorder(BorderFactory.createEmptyBorder());
+
+        contentCards.add(liveSplit, LIVE_MODE);
+
+        add(contentCards, BorderLayout.CENTER);
+    }
+
+    private void onModeSwitch() {
+        boolean isLive = modeSwitch.getSelectedIndex() == 1;
+        if (isLive) {
+            // Stop WAV playback if running
+            if (player.isPlaying()) {
+                player.stop();
+                playBtn.setText("Play");
+            }
+            if (renderController.isRendering()) {
+                renderController.cancel();
+            }
+            toolbarCardLayout.show(toolbarCards, LIVE_MODE);
+            contentCardLayout.show(contentCards, LIVE_MODE);
+        } else {
+            // Switching back to WAV: stop live engine if running
+            stopLiveMode();
+            toolbarCardLayout.show(toolbarCards, WAV_MODE);
+            contentCardLayout.show(contentCards, WAV_MODE);
+        }
+        toolbarCards.revalidate();
+        toolbarCards.repaint();
+        contentCards.revalidate();
+        contentCards.repaint();
+    }
+
+    private void startLiveMode() {
+        // Validate samples
+        if (params.sourceFile == null || !params.sourceFile.exists()) {
+            JOptionPane.showMessageDialog(this,
+                    "Source sample file not found. Set it in the Samples section.",
+                    "Missing Sample", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (params.grainFile == null || !params.grainFile.exists()) {
+            JOptionPane.showMessageDialog(this,
+                    "Grain sample file not found. Set it in the Samples section.",
+                    "Missing Sample", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        liveStartBtn.setEnabled(false);
+        midiStatusLabel.setText("Starting...");
+
+        new SwingWorker<Void, Void>() {
+            @Override
+            protected Void doInBackground() {
+                liveController.start(params);
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    get(); // check for exceptions
+                    liveStopBtn.setEnabled(true);
+                    midiStatusLabel.setText("MIDI: " + liveController.getMidiDeviceName());
+
+                    // Wire up panels
+                    liveParamPanel.setLiveController(liveController);
+                    liveMonitorPanel.setLiveController(liveController);
+
+                    // Start polling
+                    liveParamPanel.startSync();
+                    liveMonitorPanel.startPolling();
+
+                    // Start toolbar status timer
+                    if (liveStatusTimer != null) liveStatusTimer.stop();
+                    liveStatusTimer = new Timer(100, ev -> {
+                        if (liveController.isRunning()) {
+                            voiceCountLabel.setText("V:" + liveController.getActiveVoiceCount()
+                                + "/" + liveController.getMaxVoices()
+                                + "  G:" + liveController.getActiveGrainCount()
+                                + "/" + liveController.getMaxGrains());
+                        }
+                    });
+                    liveStatusTimer.start();
+                } catch (Exception ex) {
+                    liveStartBtn.setEnabled(true);
+                    midiStatusLabel.setText("Error");
+                    JOptionPane.showMessageDialog(MainWindow.this,
+                            "Failed to start live mode: " + ex.getMessage(),
+                            "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }.execute();
+    }
+
+    private void stopLiveMode() {
+        if (liveStatusTimer != null) {
+            liveStatusTimer.stop();
+            liveStatusTimer = null;
+        }
+        if (!liveController.isRunning()) return;
+
+        liveParamPanel.stopSync();
+        liveMonitorPanel.stopPolling();
+        liveController.stop();
+
+        liveStartBtn.setEnabled(true);
+        liveStopBtn.setEnabled(false);
+        midiStatusLabel.setText("MIDI: —");
+        voiceCountLabel.setText("");
+        liveMonitorPanel.reset();
     }
 
     private void setupKeyboardShortcuts() {
@@ -278,13 +511,19 @@ public class MainWindow extends JFrame {
         root.getActionMap().put("stop", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                doStop();
+                // Escape stops live mode if active, otherwise stops WAV playback/render
+                if (liveController.isRunning()) {
+                    stopLiveMode();
+                } else {
+                    doStop();
+                }
             }
         });
     }
 
     private void doRender() {
         if (renderController.isRendering()) return;
+        if (modeSwitch.getSelectedIndex() == 1) return; // don't render in live mode
         if (player.isPlaying()) {
             player.stop();
         }
@@ -299,6 +538,7 @@ public class MainWindow extends JFrame {
 
     private void doPlay() {
         if (renderedBuffer == null) return;
+        if (modeSwitch.getSelectedIndex() == 1) return; // don't play WAV in live mode
         if (player.isPlaying()) {
             player.stop();
             playBtn.setText("Play");
