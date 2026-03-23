@@ -5,41 +5,37 @@ import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.DataLine;
 import javax.sound.sampled.SourceDataLine;
 
-import org.delightofcomposition.analysis.SpectralAnalysis;
 import org.delightofcomposition.sound.WaveWriter;
 
+/**
+ * Audio output thread that plays back pre-rendered granular layers + source
+ * sample, mixed and pitch-shifted per active MIDI voice.
+ */
 public class AudioEngine implements Runnable {
     private static final int BUFFER_SIZE = 512; // ~10.7ms at 48kHz
 
-    private final GrainPool grainPool;
     private final Voice[] voices;
     private final ControlState controls;
-    private final SpectralAnalysis analysis;
-    private final double[] grainSample;
-    private final double grainOrigFreq;
-    private final double[] sourceSample;
     private volatile boolean running;
 
     // Pre-allocated buffers to avoid GC in audio thread
     private final double[] mixBuffer;
     private final byte[] byteBuffer;
 
-    // Source playback position tracking (for mix feature)
-    private int sourcePlaybackPos;
-
-    public AudioEngine(GrainPool grainPool, Voice[] voices, ControlState controls,
-                       SpectralAnalysis analysis, double[] grainSample,
-                       double grainOrigFreq, double[] sourceSample) {
-        this.grainPool = grainPool;
+    public AudioEngine(Voice[] voices, ControlState controls) {
         this.voices = voices;
         this.controls = controls;
-        this.analysis = analysis;
-        this.grainSample = grainSample;
-        this.grainOrigFreq = grainOrigFreq;
-        this.sourceSample = sourceSample;
         this.mixBuffer = new double[BUFFER_SIZE];
         this.byteBuffer = new byte[BUFFER_SIZE * 2]; // 16-bit mono = 2 bytes per sample
-        this.sourcePlaybackPos = 0;
+    }
+
+    /**
+     * Update pre-rendered buffers on all voices (can be called after re-render).
+     */
+    public void setBuffers(double[][] granularLayers, double[] sourceBuffer) {
+        for (Voice voice : voices) {
+            voice.setBuffers(granularLayers, sourceBuffer);
+        }
     }
 
     @Override
@@ -65,39 +61,18 @@ public class AudioEngine implements Runnable {
                     mixBuffer[i] = 0;
                 }
 
-                double density = controls.getDensity();
                 double mix = controls.getMix();
+                double density = controls.getDensity();
 
-                // Schedule grains for active voices
+                // Render all active voices into mix buffer
                 for (Voice voice : voices) {
                     if (voice.isActive()) {
-                        voice.scheduleGrains(analysis, grainPool, grainSample,
-                                grainOrigFreq, density, BUFFER_SIZE);
-                    }
-                }
-
-                // Render all active grains into mix buffer
-                grainPool.renderAll(mixBuffer, 0, BUFFER_SIZE);
-
-                // Blend with source sample based on mix control
-                if (mix > 0 && sourceSample != null) {
-                    for (int i = 0; i < BUFFER_SIZE; i++) {
-                        int srcPos = sourcePlaybackPos + i;
-                        double srcSample = 0;
-                        if (srcPos >= 0 && srcPos < sourceSample.length) {
-                            srcSample = sourceSample[srcPos];
-                        }
-                        mixBuffer[i] = (1.0 - mix) * mixBuffer[i] + mix * srcSample;
-                    }
-                    sourcePlaybackPos += BUFFER_SIZE;
-                    if (sourcePlaybackPos >= sourceSample.length) {
-                        sourcePlaybackPos = 0; // loop source for mix
+                        voice.render(mixBuffer, BUFFER_SIZE, mix, density);
                     }
                 }
 
                 // Soft clip and convert to 16-bit PCM bytes (little-endian)
                 for (int i = 0; i < BUFFER_SIZE; i++) {
-                    // Soft clip
                     double sample = mixBuffer[i];
                     if (sample > 1.0) sample = 1.0;
                     else if (sample < -1.0) sample = -1.0;
@@ -107,7 +82,6 @@ public class AudioEngine implements Runnable {
                     byteBuffer[i * 2 + 1] = (byte) ((pcm >> 8) & 0xFF);
                 }
 
-                // This blocks until the audio system consumes the buffer
                 line.write(byteBuffer, 0, byteBuffer.length);
             }
 
@@ -127,10 +101,6 @@ public class AudioEngine implements Runnable {
 
     public boolean isRunning() {
         return running;
-    }
-
-    public int getActiveGrainCount() {
-        return grainPool.activeCount();
     }
 
     public int getActiveVoiceCount() {

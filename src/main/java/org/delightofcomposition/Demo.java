@@ -260,4 +260,100 @@ public class Demo {
         Envelope mixEnv = new Envelope(new double[] { 0, 0.7, 0.9 }, new double[] { 0, 0, 1 });
         return demo(fullSound, probEnv, mixEnv);
     }
+
+    /**
+     * Renders a single granular texture layer (pure granular, no source mix).
+     * Uses a flat density of 1/3 so that 3 layers with different seeds stack
+     * to full density. The seedOffset shifts the random seed per window so
+     * each layer gets different grain placements.
+     */
+    public static double[] renderGranularLayer(double[] fullSound, SynthParameters params,
+                                                long seedOffset, Consumer<Integer> progress) {
+        cancelled = false;
+
+        int outLength = fullSound.length + WaveWriter.SAMPLE_RATE * 30;
+        double[] outSig = new double[outLength];
+
+        Synth synth = new SimpleSynth(
+                params.grainFile.getPath(),
+                params.grainReferenceFreq,
+                params.useReverb,
+                params.synthReverbMix,
+                params.impulseResponseFile.getPath());
+
+        int windowSize = params.getWindowSize();
+        double controlRate = params.controlRate;
+        double amplitudeThreshold = params.amplitudeThreshold;
+        int grainsPerPeak = params.grainsPerPeak;
+        // Flat 1/3 density — 3 layers stack to full
+        Envelope probEnv = new Envelope(new double[]{0, 1}, new double[]{0.333, 0.333});
+
+        double totalDuration = fullSound.length / (double) WaveWriter.SAMPLE_RATE;
+        final double[] sourceSound = fullSound;
+
+        List<Double> windowTimes = new ArrayList<>();
+        for (double time = controlRate; time < totalDuration - controlRate; time += controlRate) {
+            windowTimes.add(time);
+        }
+        int totalWindows = windowTimes.size();
+
+        int nThreads = Runtime.getRuntime().availableProcessors();
+        ExecutorService pool = Executors.newFixedThreadPool(nThreads);
+        AtomicInteger completedWindows = new AtomicInteger(0);
+
+        try {
+            int batchSize = (totalWindows + nThreads - 1) / nThreads;
+            List<Future<double[]>> futures = new ArrayList<>();
+
+            for (int b = 0; b < nThreads; b++) {
+                int from = b * batchSize;
+                int to = Math.min(from + batchSize, totalWindows);
+                if (from >= totalWindows) break;
+
+                final int batchFrom = from;
+                final int batchTo = to;
+
+                futures.add(pool.submit(() -> {
+                    double[] localBuf = new double[outLength];
+                    for (int idx = batchFrom; idx < batchTo; idx++) {
+                        if (cancelled) return localBuf;
+
+                        double time = windowTimes.get(idx);
+                        Random rng = new Random(idx + seedOffset);
+
+                        processWindow(time, sourceSound, synth, windowSize,
+                                controlRate, amplitudeThreshold, grainsPerPeak,
+                                probEnv, localBuf, rng);
+
+                        int done = completedWindows.incrementAndGet();
+                        if (progress != null) {
+                            progress.accept((int) (100.0 * done / totalWindows));
+                        }
+                    }
+                    return localBuf;
+                }));
+            }
+
+            for (Future<double[]> f : futures) {
+                double[] buf = f.get();
+                if (cancelled) return null;
+                for (int i = 0; i < outSig.length; i++) {
+                    outSig[i] += buf[i];
+                }
+            }
+        } catch (InterruptedException | ExecutionException e) {
+            return null;
+        } finally {
+            pool.shutdownNow();
+        }
+
+        if (cancelled) return null;
+
+        // Trim to source length and normalize — no source mix applied
+        outSig = Arrays.copyOf(outSig, fullSound.length);
+        Normalize.normalize(outSig);
+
+        if (progress != null) progress.accept(100);
+        return outSig;
+    }
 }
