@@ -1,19 +1,26 @@
 package org.delightofcomposition.realtime;
 
-import org.delightofcomposition.analysis.SpectralAnalysis;
-import org.delightofcomposition.analysis.WindowPeaks;
 import org.delightofcomposition.sound.WaveWriter;
 
+/**
+ * One MIDI voice — plays back pre-rendered granular layers + source sample
+ * with pitch shifting and ADSR envelope.
+ */
 public class Voice {
+    private static final int NUM_LAYERS = 3;
+
     private int midiNote;
     private double velocity;
-    private double transposeRatio;
+    private double playbackRate; // midiFreq / sourceFundamental
     private boolean active;
-    private boolean released;
 
-    // Playback position in spectral analysis windows
-    private double windowPosition;
-    private int samplesElapsed;
+    // Playback position (fractional sample index into the pre-rendered buffers)
+    private double position;
+
+    // References to shared pre-rendered buffers (set by AudioEngine)
+    private double[][] granularLayers; // [3][samples]
+    private double[] sourceBuffer;
+    private int bufferLength; // shortest buffer length
 
     // ADSR envelope
     private static final int ATTACK_SAMPLES = (int) (0.050 * WaveWriter.SAMPLE_RATE);
@@ -30,115 +37,126 @@ public class Voice {
         this.active = false;
     }
 
+    public void setBuffers(double[][] granularLayers, double[] sourceBuffer) {
+        this.granularLayers = granularLayers;
+        this.sourceBuffer = sourceBuffer;
+        // Use shortest buffer to avoid out-of-bounds
+        int min = sourceBuffer.length;
+        for (double[] layer : granularLayers) {
+            min = Math.min(min, layer.length);
+        }
+        this.bufferLength = min;
+    }
+
     public void noteOn(int note, int velocity, double sourceFundamental) {
         this.midiNote = note;
         this.velocity = velocity / 127.0;
         double midiFreq = 440.0 * Math.pow(2, (note - 69) / 12.0);
-        this.transposeRatio = midiFreq / sourceFundamental;
-        this.windowPosition = 0;
-        this.samplesElapsed = 0;
+        this.playbackRate = midiFreq / sourceFundamental;
+        this.position = 0;
         this.envStage = EnvStage.ATTACK;
         this.envSamplesInStage = 0;
         this.envLevel = 0;
-        this.released = false;
         this.active = true;
     }
 
     public void noteOff() {
         if (active && envStage != EnvStage.RELEASE && envStage != EnvStage.OFF) {
-            this.released = true;
             this.envStage = EnvStage.RELEASE;
             this.envSamplesInStage = 0;
         }
     }
 
-    public void scheduleGrains(SpectralAnalysis analysis, GrainPool pool,
-                                double[] grainSample, double grainOrigFreq,
-                                double density, int bufferSize) {
-        if (!active || envStage == EnvStage.OFF) return;
+    /**
+     * Render this voice into the output buffer, blending granular layers
+     * and source based on mix and density controls.
+     */
+    public void render(double[] outBuffer, int length, double mix, double density) {
+        if (!active || granularLayers == null || sourceBuffer == null) return;
 
-        // Advance window position based on elapsed samples
-        double controlRateSamples = analysis.getWindowDurationSec() * WaveWriter.SAMPLE_RATE;
-        int windowIndex = (int) (samplesElapsed / controlRateSamples);
-
-        // Stop scheduling if we've run past the analysis
-        if (windowIndex >= analysis.getWindowCount()) {
-            // No more windows, but don't deactivate yet - let release tail play
-            samplesElapsed += bufferSize;
-            advanceEnvelope(bufferSize);
-            return;
-        }
-
-        WindowPeaks peaks = analysis.getWindow(windowIndex);
-        if (peaks == null) {
-            samplesElapsed += bufferSize;
-            advanceEnvelope(bufferSize);
-            return;
-        }
-
-        double currentEnv = envLevel * velocity;
-
-        // For each peak, probabilistically spawn grains (same as Demo.java logic)
-        for (int p = 0; p < peaks.getPeakCount(); p++) {
-            double peakFreq = peaks.getFrequency(p) * transposeRatio;
-            double peakAmp = peaks.getAmplitude(p) * currentEnv;
-
-            // Up to 10 grain attempts per peak per window
-            for (int i = 0; i < 10; i++) {
-                if (Math.random() < density) {
-                    Grain grain = pool.allocate();
-                    if (grain == null) return; // pool exhausted
-
-                    double playbackRate = peakFreq / grainOrigFreq;
-                    int lifetime = (int) (grainSample.length / playbackRate);
-                    if (lifetime > 0) {
-                        grain.activate(grainSample, playbackRate, peakAmp, lifetime);
-                    }
+        for (int i = 0; i < length; i++) {
+            // Check if we've reached the end of the buffers
+            int srcIndex = (int) position;
+            if (srcIndex + 1 >= bufferLength) {
+                // Buffer exhausted — if in sustain, just hold; if releasing, deactivate
+                if (envStage == EnvStage.RELEASE || envStage == EnvStage.OFF) {
+                    active = false;
                 }
+                return;
+            }
+
+            double fract = position - srcIndex;
+
+            // Read from each granular layer with linear interpolation
+            double granularSum = 0;
+            for (int layer = 0; layer < NUM_LAYERS; layer++) {
+                double[] buf = granularLayers[layer];
+                double sample = buf[srcIndex] * (1 - fract) + buf[srcIndex + 1] * fract;
+
+                // Scale by density: layer 0 fades in at 0-0.33, layer 1 at 0.33-0.67, etc.
+                double layerGain = Math.max(0, Math.min(1, (density - layer / 3.0) * 3.0));
+                granularSum += sample * layerGain;
+            }
+
+            // Read source with linear interpolation
+            double sourceVal = sourceBuffer[srcIndex] * (1 - fract)
+                             + sourceBuffer[srcIndex + 1] * fract;
+
+            // Blend granular and source
+            double blended = (1.0 - mix) * granularSum + mix * sourceVal;
+
+            // Apply ADSR envelope and velocity
+            blended *= envLevel * velocity;
+
+            outBuffer[i] += blended;
+
+            // Advance playback position
+            position += playbackRate;
+
+            // Advance envelope
+            advanceEnvelope();
+            if (envStage == EnvStage.OFF) {
+                active = false;
+                return;
             }
         }
-
-        samplesElapsed += bufferSize;
-        advanceEnvelope(bufferSize);
     }
 
-    private void advanceEnvelope(int samples) {
-        for (int i = 0; i < samples; i++) {
-            switch (envStage) {
-                case ATTACK:
-                    envLevel = envSamplesInStage / (double) ATTACK_SAMPLES;
-                    envSamplesInStage++;
-                    if (envSamplesInStage >= ATTACK_SAMPLES) {
-                        envStage = EnvStage.DECAY;
-                        envSamplesInStage = 0;
-                        envLevel = 1.0;
-                    }
-                    break;
-                case DECAY:
-                    envLevel = 1.0 - (1.0 - SUSTAIN_LEVEL) * (envSamplesInStage / (double) DECAY_SAMPLES);
-                    envSamplesInStage++;
-                    if (envSamplesInStage >= DECAY_SAMPLES) {
-                        envStage = EnvStage.SUSTAIN;
-                        envSamplesInStage = 0;
-                        envLevel = SUSTAIN_LEVEL;
-                    }
-                    break;
-                case SUSTAIN:
+    private void advanceEnvelope() {
+        switch (envStage) {
+            case ATTACK:
+                envLevel = envSamplesInStage / (double) ATTACK_SAMPLES;
+                envSamplesInStage++;
+                if (envSamplesInStage >= ATTACK_SAMPLES) {
+                    envStage = EnvStage.DECAY;
+                    envSamplesInStage = 0;
+                    envLevel = 1.0;
+                }
+                break;
+            case DECAY:
+                envLevel = 1.0 - (1.0 - SUSTAIN_LEVEL) * (envSamplesInStage / (double) DECAY_SAMPLES);
+                envSamplesInStage++;
+                if (envSamplesInStage >= DECAY_SAMPLES) {
+                    envStage = EnvStage.SUSTAIN;
+                    envSamplesInStage = 0;
                     envLevel = SUSTAIN_LEVEL;
-                    break;
-                case RELEASE:
-                    envLevel = SUSTAIN_LEVEL * (1.0 - envSamplesInStage / (double) RELEASE_SAMPLES);
-                    envSamplesInStage++;
-                    if (envSamplesInStage >= RELEASE_SAMPLES) {
-                        envStage = EnvStage.OFF;
-                        envLevel = 0;
-                        active = false;
-                    }
-                    break;
-                case OFF:
+                }
+                break;
+            case SUSTAIN:
+                envLevel = SUSTAIN_LEVEL;
+                break;
+            case RELEASE:
+                envLevel = SUSTAIN_LEVEL * (1.0 - envSamplesInStage / (double) RELEASE_SAMPLES);
+                envSamplesInStage++;
+                if (envSamplesInStage >= RELEASE_SAMPLES) {
+                    envStage = EnvStage.OFF;
+                    envLevel = 0;
                     active = false;
-                    return;
-            }
+                }
+                break;
+            case OFF:
+                active = false;
+                break;
         }
     }
 
