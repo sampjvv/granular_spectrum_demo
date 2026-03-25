@@ -15,7 +15,8 @@ import org.delightofcomposition.sound.WaveWriter;
 public class RealtimeMain {
 
     private static final int MAX_VOICES = 16;
-    private static final int NUM_LAYERS = 3;
+    private static final int NUM_LAYERS = 5;
+    private static final double[] LAYER_DENSITIES = {0.05, 0.15, 0.20, 0.30, 0.30};
 
     public static AudioEngine start(String sourcePath, String grainPath, double grainOrigFreq) {
         System.out.println("=== Real-Time MIDI Granular Spectrum ===");
@@ -42,7 +43,7 @@ public class RealtimeMain {
                     + " (seed offset " + seedOffset + ")...");
             double[] layerSource = ReadSound.readSoundDoubles(sourcePath);
             Normalize.normalize(layerSource);
-            granularLayers[i] = Demo.renderGranularLayer(layerSource, params, seedOffset, null);
+            granularLayers[i] = Demo.renderGranularLayer(layerSource, params, seedOffset, LAYER_DENSITIES[i], null);
             if (granularLayers[i] == null) {
                 System.err.println("Render cancelled or failed.");
                 return null;
@@ -52,14 +53,16 @@ public class RealtimeMain {
 
         // Create engine components
         ControlState controls = new ControlState();
+        SynthParameters defaults = new SynthParameters();
         Voice[] voices = new Voice[MAX_VOICES];
         for (int i = 0; i < MAX_VOICES; i++) {
             voices[i] = new Voice();
+            voices[i].setBuffers(granularLayers, sourceSample,
+                    defaults.dramaticFactor, defaults.dramaticEnvShape);
         }
 
-        // Create audio engine and set buffers
+        // Create audio engine
         AudioEngine engine = new AudioEngine(voices, controls);
-        engine.setBuffers(granularLayers, sourceSample);
 
         // Set up MIDI input
         MidiDevice midiDevice = MidiInputHandler.findAndOpenDevice();

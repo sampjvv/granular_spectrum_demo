@@ -79,6 +79,9 @@ public class MidiInputHandler implements Receiver {
             case 1: // Mod wheel -> mix
                 controls.setMix(value / 127.0);
                 break;
+            case 10: // Pan -> stereo position
+                controls.setPan(value / 127.0);
+                break;
             case 74: // Brightness -> density
                 controls.setDensity(value / 127.0);
                 break;

@@ -263,12 +263,14 @@ public class Demo {
 
     /**
      * Renders a single granular texture layer (pure granular, no source mix).
-     * Uses a flat density of 1/3 so that 3 layers with different seeds stack
-     * to full density. The seedOffset shifts the random seed per window so
-     * each layer gets different grain placements.
+     * The layerDensity controls grain placement probability (e.g. 0.05 for a sparse
+     * layer, 0.30 for a dense one). Multiple layers with different seeds and
+     * densities stack to full density. The seedOffset shifts the random seed
+     * per window so each layer gets different grain placements.
      */
     public static double[] renderGranularLayer(double[] fullSound, SynthParameters params,
-                                                long seedOffset, Consumer<Integer> progress) {
+                                                long seedOffset, double layerDensity,
+                                                Consumer<Integer> progress) {
         cancelled = false;
 
         int outLength = fullSound.length + WaveWriter.SAMPLE_RATE * 30;
@@ -285,8 +287,7 @@ public class Demo {
         double controlRate = params.controlRate;
         double amplitudeThreshold = params.amplitudeThreshold;
         int grainsPerPeak = params.grainsPerPeak;
-        // Flat 1/3 density — 3 layers stack to full
-        Envelope probEnv = new Envelope(new double[]{0, 1}, new double[]{0.333, 0.333});
+        Envelope probEnv = new Envelope(new double[]{0, 1}, new double[]{layerDensity, layerDensity});
 
         double totalDuration = fullSound.length / (double) WaveWriter.SAMPLE_RATE;
         final double[] sourceSound = fullSound;

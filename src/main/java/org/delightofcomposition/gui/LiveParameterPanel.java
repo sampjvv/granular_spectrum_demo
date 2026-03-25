@@ -20,20 +20,35 @@ import org.delightofcomposition.realtime.ControlState;
 import org.delightofcomposition.realtime.LiveMidiController;
 
 /**
- * Left panel for Live mode — shows only the parameters relevant
- * to real-time MIDI playback plus live density/mix controls.
+ * Left panel for Live mode — synthesis parameters (pre-render)
+ * plus real-time density/mix/pan controls.
  */
 public class LiveParameterPanel extends JPanel implements Scrollable {
 
     private final SynthParameters params;
 
+    // Samples
     private SampleDropPanel sourceDropPanel;
     private SampleDropPanel grainDropPanel;
     private StepperControl refFreqStepper;
+    private SampleDropPanel irDropPanel;
+
+    // Synthesis
     private SegmentedControl windowSizeSegmented;
     private StepperControl controlRateStepper;
+    private StepperControl grainsPerPeakStepper;
+    private LabeledSlider ampThresholdSlider;
+
+    // Reverb
+    private ToggleSwitch useReverbToggle;
+    private LabeledSlider sourceReverbSlider;
+    private LabeledSlider synthReverbSlider;
+
+    // Live controls
     private LabeledSlider densitySlider;
     private LabeledSlider mixSlider;
+    private LabeledSlider panSlider;
+    private LabeledSlider dramaticSlider;
 
     private LiveMidiController liveController;
     private Timer syncTimer;
@@ -49,8 +64,47 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
         add(Box.createVerticalStrut(Theme.SECTION_GAP));
         add(buildSynthesisSection());
         add(Box.createVerticalStrut(Theme.SECTION_GAP));
+        add(buildReverbSection());
+        add(Box.createVerticalStrut(Theme.SECTION_GAP));
         add(buildLiveControlsSection());
         add(Box.createVerticalGlue());
+
+        registerHelpTexts();
+    }
+
+    private void registerHelpTexts() {
+        HelpManager help = HelpManager.getInstance();
+        help.register(sourceDropPanel,
+                "The audio file whose spectral content will be analyzed and resynthesized as granular texture.");
+        help.register(grainDropPanel,
+                "The short audio sample used as the building block for granular synthesis. Its timbre colors the output.");
+        help.register(refFreqStepper,
+                "The fundamental frequency (Hz) of the grain sample. Used to tune grains to match spectral peaks.");
+        help.register(irDropPanel,
+                "An impulse response recording used for convolution reverb, placing the sound in a virtual space.");
+        help.register(windowSizeSegmented,
+                "FFT window size: larger = better frequency resolution but smears timing. Smaller = better timing but coarser frequency.");
+        help.register(controlRateStepper,
+                "Time between analysis windows. Lower = more detail but longer render. Higher = faster but less smooth.");
+        help.register(grainsPerPeakStepper,
+                "How many grain copies per spectral peak. More = denser/richer texture, fewer = sparser/clearer.");
+        help.register(ampThresholdSlider,
+                "Minimum amplitude for a spectral peak to trigger grains. Higher = only loud peaks, lower = more detail.");
+        help.register(useReverbToggle,
+                "Apply convolution reverb using the impulse response sample to add spatial depth.");
+        help.register(sourceReverbSlider,
+                "How much reverb to apply to the original source audio portion of the mix.");
+        help.register(synthReverbSlider,
+                "How much reverb to apply to the granular synthesized portion of the mix.");
+        help.register(densitySlider,
+                "Controls how many granular layers are audible. Use the up/down arrow keys or MIDI CC#74 as shortcuts.");
+        help.register(mixSlider,
+                "Blends between the granular texture (0%) and the original source sample (100%). "
+                + "Use the left/right arrow keys or MIDI mod wheel as shortcuts.");
+        help.register(panSlider,
+                "Stereo position of the output. Left = 0%, Center = 50%, Right = 100%. Also controllable via MIDI CC#10.");
+        help.register(dramaticSlider,
+                "Exaggerates amplitude dynamics across the playback position. Higher = more contrast and drama.");
     }
 
     private JPanel buildSamplesSection() {
@@ -79,6 +133,12 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
         refFreqStepper.setAlignmentX(0);
         refFreqStepper.addChangeListener(e -> params.grainReferenceFreq = refFreqStepper.getDoubleValue());
         card.add(refFreqStepper);
+        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+
+        irDropPanel = new SampleDropPanel("Impulse Response", params.impulseResponseFile,
+                file -> params.impulseResponseFile = file);
+        irDropPanel.setAlignmentX(0);
+        card.add(irDropPanel);
 
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
         return card;
@@ -110,6 +170,66 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
         controlRateStepper.setAlignmentX(0);
         controlRateStepper.addChangeListener(e -> params.controlRate = controlRateStepper.getDoubleValue());
         card.add(controlRateStepper);
+        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+
+        JLabel gpLabel = Theme.paramLabel("Grains / Peak");
+        gpLabel.setAlignmentX(0);
+        card.add(gpLabel);
+        card.add(Box.createVerticalStrut(Theme.LABEL_GAP));
+        grainsPerPeakStepper = new StepperControl(params.grainsPerPeak, 1, 50, 1);
+        grainsPerPeakStepper.setAlignmentX(0);
+        grainsPerPeakStepper.addChangeListener(e -> params.grainsPerPeak = grainsPerPeakStepper.getIntValue());
+        card.add(grainsPerPeakStepper);
+        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+
+        ampThresholdSlider = new LabeledSlider("Amp Threshold", 1, 500,
+                (int) (params.amplitudeThreshold * 1000),
+                v -> String.format("%.3f", v / 1000.0));
+        ampThresholdSlider.setAlignmentX(0);
+        ampThresholdSlider.addChangeListener(e ->
+                params.amplitudeThreshold = ampThresholdSlider.getValue() / 1000.0);
+        card.add(ampThresholdSlider);
+        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+
+        dramaticSlider = new LabeledSlider("Dramatic", 1, 2000,
+                (int) (params.dramaticFactor * 100),
+                v -> String.format("%.2f", v / 100.0));
+        dramaticSlider.setAlignmentX(0);
+        dramaticSlider.addChangeListener(e ->
+                params.dramaticFactor = dramaticSlider.getValue() / 100.0);
+        card.add(dramaticSlider);
+
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
+        return card;
+    }
+
+    private JPanel buildReverbSection() {
+        JPanel card = sectionCard();
+
+        card.add(Theme.sectionHeader("Reverb"));
+        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+
+        useReverbToggle = new ToggleSwitch(params.useReverb);
+        useReverbToggle.addChangeListener(e -> params.useReverb = useReverbToggle.isSelected());
+        JPanel toggleRow = Theme.toggleRow("Use Reverb", useReverbToggle);
+        toggleRow.setAlignmentX(0);
+        card.add(toggleRow);
+        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+
+        sourceReverbSlider = new LabeledSlider("Source Mix", 0, 100,
+                (int) (params.sourceReverbMix * 100), v -> v + "%");
+        sourceReverbSlider.setAlignmentX(0);
+        sourceReverbSlider.addChangeListener(e ->
+                params.sourceReverbMix = sourceReverbSlider.getValue() / 100.0);
+        card.add(sourceReverbSlider);
+        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+
+        synthReverbSlider = new LabeledSlider("Synth Mix", 0, 100,
+                (int) (params.synthReverbMix * 100), v -> v + "%");
+        synthReverbSlider.setAlignmentX(0);
+        synthReverbSlider.addChangeListener(e ->
+                params.synthReverbMix = synthReverbSlider.getValue() / 100.0);
+        card.add(synthReverbSlider);
 
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
         return card;
@@ -141,6 +261,18 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
             }
         });
         card.add(mixSlider);
+        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+
+        panSlider = new LabeledSlider("Pan", 0, 100, 50,
+                v -> v < 45 ? "L " + (50 - v) : v > 55 ? "R " + (v - 50) : "C");
+        panSlider.setAlignmentX(0);
+        panSlider.addChangeListener(e -> {
+            if (syncing) return;
+            if (liveController != null && liveController.getControlState() != null) {
+                liveController.getControlState().setPan(panSlider.getValue() / 100.0);
+            }
+        });
+        card.add(panSlider);
 
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
         return card;
@@ -159,6 +291,7 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
 
             int densityVal = (int) (cs.getDensity() * 100);
             int mixVal = (int) (cs.getMix() * 100);
+            int panVal = (int) (cs.getPan() * 100);
 
             syncing = true;
             try {
@@ -167,6 +300,9 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
                 }
                 if (mixSlider.getValue() != mixVal) {
                     mixSlider.setValue(mixVal);
+                }
+                if (panSlider.getValue() != panVal) {
+                    panSlider.setValue(panVal);
                 }
             } finally {
                 syncing = false;

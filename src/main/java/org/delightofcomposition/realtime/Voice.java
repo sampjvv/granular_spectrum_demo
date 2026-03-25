@@ -1,13 +1,14 @@
 package org.delightofcomposition.realtime;
 
+import org.delightofcomposition.envelopes.Envelope;
 import org.delightofcomposition.sound.WaveWriter;
 
 /**
  * One MIDI voice — plays back pre-rendered granular layers + source sample
- * with pitch shifting and ADSR envelope.
+ * with pitch shifting, ADSR envelope, dramatic envelope, and stereo panning.
  */
 public class Voice {
-    private static final int NUM_LAYERS = 3;
+    private static final int NUM_LAYERS = 5;
 
     private int midiNote;
     private double velocity;
@@ -17,10 +18,15 @@ public class Voice {
     // Playback position (fractional sample index into the pre-rendered buffers)
     private double position;
 
-    // References to shared pre-rendered buffers (set by AudioEngine)
-    private double[][] granularLayers; // [3][samples]
+    // References to shared pre-rendered buffers
+    private double[][] granularLayers; // [5][samples]
     private double[] sourceBuffer;
     private int bufferLength; // shortest buffer length
+
+    // Dramatic envelope parameters
+    private double dramaticFactor;
+    private Envelope dramaticEnvShape;
+    private double dramaticDenom; // precomputed: (e^factor - 1)
 
     // ADSR envelope
     private static final int ATTACK_SAMPLES = (int) (0.050 * WaveWriter.SAMPLE_RATE);
@@ -37,9 +43,14 @@ public class Voice {
         this.active = false;
     }
 
-    public void setBuffers(double[][] granularLayers, double[] sourceBuffer) {
+    public void setBuffers(double[][] granularLayers, double[] sourceBuffer,
+                           double dramaticFactor, Envelope dramaticEnvShape) {
         this.granularLayers = granularLayers;
         this.sourceBuffer = sourceBuffer;
+        this.dramaticFactor = dramaticFactor;
+        this.dramaticEnvShape = dramaticEnvShape;
+        this.dramaticDenom = (dramaticFactor > 0.001)
+                ? (Math.pow(Math.E, dramaticFactor) - 1) : 1.0;
         // Use shortest buffer to avoid out-of-bounds
         int min = sourceBuffer.length;
         for (double[] layer : granularLayers) {
@@ -68,17 +79,17 @@ public class Voice {
     }
 
     /**
-     * Render this voice into the output buffer, blending granular layers
-     * and source based on mix and density controls.
+     * Render this voice into stereo output buffers, blending granular layers
+     * and source based on mix, density, and pan controls.
      */
-    public void render(double[] outBuffer, int length, double mix, double density) {
+    public void render(double[] outL, double[] outR, int length,
+                       double mix, double density, double pan) {
         if (!active || granularLayers == null || sourceBuffer == null) return;
 
         for (int i = 0; i < length; i++) {
             // Check if we've reached the end of the buffers
             int srcIndex = (int) position;
             if (srcIndex + 1 >= bufferLength) {
-                // Buffer exhausted — if in sustain, just hold; if releasing, deactivate
                 if (envStage == EnvStage.RELEASE || envStage == EnvStage.OFF) {
                     active = false;
                 }
@@ -93,8 +104,8 @@ public class Voice {
                 double[] buf = granularLayers[layer];
                 double sample = buf[srcIndex] * (1 - fract) + buf[srcIndex + 1] * fract;
 
-                // Scale by density: layer 0 fades in at 0-0.33, layer 1 at 0.33-0.67, etc.
-                double layerGain = Math.max(0, Math.min(1, (density - layer / 3.0) * 3.0));
+                // Scale by density: each layer gets 1/5 of the slider range to fade in
+                double layerGain = Math.max(0, Math.min(1, (density - layer / (double) NUM_LAYERS) * NUM_LAYERS));
                 granularSum += sample * layerGain;
             }
 
@@ -105,10 +116,20 @@ public class Voice {
             // Blend granular and source
             double blended = (1.0 - mix) * granularSum + mix * sourceVal;
 
+            // Apply dramatic envelope based on playback position
+            if (dramaticFactor > 0.001 && dramaticEnvShape != null) {
+                double envPos = position / (double) bufferLength;
+                double linear = dramaticEnvShape.getValue(Math.min(1.0, envPos));
+                double expFunc = (Math.pow(Math.E, dramaticFactor * linear) - 1) / dramaticDenom;
+                blended *= expFunc;
+            }
+
             // Apply ADSR envelope and velocity
             blended *= envLevel * velocity;
 
-            outBuffer[i] += blended;
+            // Stereo pan: 0.0 = left, 0.5 = center, 1.0 = right
+            outL[i] += blended * (1.0 - pan);
+            outR[i] += blended * pan;
 
             // Advance playback position
             position += playbackRate;

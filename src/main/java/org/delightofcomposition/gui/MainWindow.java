@@ -4,11 +4,14 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.KeyEventDispatcher;
+import java.awt.KeyboardFocusManager;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
+import java.util.List;
 
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
@@ -80,6 +83,7 @@ public class MainWindow extends JFrame {
     private JButton liveStopBtn;
     private JLabel midiStatusLabel;
     private JLabel voiceCountLabel;
+    private JProgressBar liveProgressBar;
     private Timer liveStatusTimer;
 
     public MainWindow() {
@@ -313,6 +317,12 @@ public class MainWindow extends JFrame {
         voiceCountLabel = Theme.valueLabel("");
         liveToolbar.add(voiceCountLabel);
 
+        liveToolbar.add(Box.createHorizontalStrut(12));
+        liveProgressBar = Theme.styledProgressBar();
+        liveProgressBar.setPreferredSize(new Dimension(200, 20));
+        liveProgressBar.setVisible(false);
+        liveToolbar.add(liveProgressBar);
+
         toolbarCards.add(liveToolbar, LIVE_MODE);
 
         toolbar.add(toolbarCards, BorderLayout.CENTER);
@@ -422,17 +432,27 @@ public class MainWindow extends JFrame {
         }
 
         liveStartBtn.setEnabled(false);
-        midiStatusLabel.setText("Starting...");
+        midiStatusLabel.setText("Preparing layers...");
+        liveProgressBar.setValue(0);
+        liveProgressBar.setVisible(true);
 
-        new SwingWorker<Void, Void>() {
+        new SwingWorker<Void, Integer>() {
             @Override
             protected Void doInBackground() {
-                liveController.start(params);
+                liveController.start(params, pct -> publish(pct));
                 return null;
             }
 
             @Override
+            protected void process(List<Integer> chunks) {
+                if (!chunks.isEmpty()) {
+                    liveProgressBar.setValue(chunks.get(chunks.size() - 1));
+                }
+            }
+
+            @Override
             protected void done() {
+                liveProgressBar.setVisible(false);
                 try {
                     get(); // check for exceptions
                     liveStopBtn.setEnabled(true);
@@ -450,10 +470,8 @@ public class MainWindow extends JFrame {
                     if (liveStatusTimer != null) liveStatusTimer.stop();
                     liveStatusTimer = new Timer(100, ev -> {
                         if (liveController.isRunning()) {
-                            voiceCountLabel.setText("V:" + liveController.getActiveVoiceCount()
-                                + "/" + liveController.getMaxVoices()
-                                + "  G:" + liveController.getActiveGrainCount()
-                                + "/" + liveController.getMaxGrains());
+                            voiceCountLabel.setText("Voices: " + liveController.getActiveVoiceCount()
+                                + "/" + liveController.getMaxVoices());
                         }
                     });
                     liveStatusTimer.start();
@@ -473,11 +491,14 @@ public class MainWindow extends JFrame {
             liveStatusTimer.stop();
             liveStatusTimer = null;
         }
-        if (!liveController.isRunning()) return;
 
+        // Cancel in-flight rendering or stop running engine
+        liveController.cancel();
+        liveController.stop();
+
+        liveProgressBar.setVisible(false);
         liveParamPanel.stopSync();
         liveMonitorPanel.stopPolling();
-        liveController.stop();
 
         liveStartBtn.setEnabled(true);
         liveStopBtn.setEnabled(false);
@@ -517,6 +538,33 @@ public class MainWindow extends JFrame {
                 } else {
                     doStop();
                 }
+            }
+        });
+
+        // Arrow keys: mix (left/right) and density (up/down) in live mode.
+        // Uses KeyEventDispatcher to intercept BEFORE focused sliders consume them.
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(ke -> {
+            if (ke.getID() != KeyEvent.KEY_PRESSED) return false;
+            if (!liveController.isRunning()) return false;
+            switch (ke.getKeyCode()) {
+                case KeyEvent.VK_LEFT:
+                    liveController.getControlState().setMix(
+                            liveController.getControlState().getMix() - 0.05);
+                    return true;
+                case KeyEvent.VK_RIGHT:
+                    liveController.getControlState().setMix(
+                            liveController.getControlState().getMix() + 0.05);
+                    return true;
+                case KeyEvent.VK_UP:
+                    liveController.getControlState().setDensity(
+                            liveController.getControlState().getDensity() + 0.05);
+                    return true;
+                case KeyEvent.VK_DOWN:
+                    liveController.getControlState().setDensity(
+                            liveController.getControlState().getDensity() - 0.05);
+                    return true;
+                default:
+                    return false;
             }
         });
     }

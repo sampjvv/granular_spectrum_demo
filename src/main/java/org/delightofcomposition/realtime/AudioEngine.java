@@ -8,34 +8,27 @@ import javax.sound.sampled.SourceDataLine;
 import org.delightofcomposition.sound.WaveWriter;
 
 /**
- * Audio output thread that plays back pre-rendered granular layers + source
- * sample, mixed and pitch-shifted per active MIDI voice.
+ * Audio output thread that mixes all active MIDI voices into a stereo
+ * PCM stream with real-time mix, density, and pan control.
  */
 public class AudioEngine implements Runnable {
-    private static final int BUFFER_SIZE = 512; // ~10.7ms at 48kHz
+    private static final int BUFFER_SIZE = 512; // samples per channel per block
 
     private final Voice[] voices;
     private final ControlState controls;
     private volatile boolean running;
 
     // Pre-allocated buffers to avoid GC in audio thread
-    private final double[] mixBuffer;
+    private final double[] mixBufferL;
+    private final double[] mixBufferR;
     private final byte[] byteBuffer;
 
     public AudioEngine(Voice[] voices, ControlState controls) {
         this.voices = voices;
         this.controls = controls;
-        this.mixBuffer = new double[BUFFER_SIZE];
-        this.byteBuffer = new byte[BUFFER_SIZE * 2]; // 16-bit mono = 2 bytes per sample
-    }
-
-    /**
-     * Update pre-rendered buffers on all voices (can be called after re-render).
-     */
-    public void setBuffers(double[][] granularLayers, double[] sourceBuffer) {
-        for (Voice voice : voices) {
-            voice.setBuffers(granularLayers, sourceBuffer);
-        }
+        this.mixBufferL = new double[BUFFER_SIZE];
+        this.mixBufferR = new double[BUFFER_SIZE];
+        this.byteBuffer = new byte[BUFFER_SIZE * 4]; // 16-bit stereo = 4 bytes per frame
     }
 
     @Override
@@ -44,42 +37,50 @@ public class AudioEngine implements Runnable {
 
         AudioFormat format = new AudioFormat(
                 AudioFormat.Encoding.PCM_SIGNED,
-                WaveWriter.SAMPLE_RATE, 16, 1, 2,
-                WaveWriter.SAMPLE_RATE, false); // little-endian mono
+                WaveWriter.SAMPLE_RATE, 16, 2, 4,
+                WaveWriter.SAMPLE_RATE, false); // little-endian stereo
 
         try {
-            DataLine.Info info = new DataLine.Info(SourceDataLine.class, format, BUFFER_SIZE * 4);
+            DataLine.Info info = new DataLine.Info(SourceDataLine.class, format, BUFFER_SIZE * 8);
             SourceDataLine line = (SourceDataLine) AudioSystem.getLine(info);
-            line.open(format, BUFFER_SIZE * 4);
+            line.open(format, BUFFER_SIZE * 8);
             line.start();
 
-            System.out.println("Audio engine started (48kHz, 16-bit, mono)");
+            System.out.println("Audio engine started (48kHz, 16-bit, stereo)");
 
             while (running) {
-                // Clear mix buffer
+                // Clear mix buffers
                 for (int i = 0; i < BUFFER_SIZE; i++) {
-                    mixBuffer[i] = 0;
+                    mixBufferL[i] = 0;
+                    mixBufferR[i] = 0;
                 }
 
                 double mix = controls.getMix();
                 double density = controls.getDensity();
+                double pan = controls.getPan();
 
-                // Render all active voices into mix buffer
+                // Render all active voices into stereo mix buffers
                 for (Voice voice : voices) {
                     if (voice.isActive()) {
-                        voice.render(mixBuffer, BUFFER_SIZE, mix, density);
+                        voice.render(mixBufferL, mixBufferR, BUFFER_SIZE, mix, density, pan);
                     }
                 }
 
-                // Soft clip and convert to 16-bit PCM bytes (little-endian)
+                // Soft clip and convert to interleaved 16-bit stereo PCM
                 for (int i = 0; i < BUFFER_SIZE; i++) {
-                    double sample = mixBuffer[i];
-                    if (sample > 1.0) sample = 1.0;
-                    else if (sample < -1.0) sample = -1.0;
+                    double sampleL = mixBufferL[i];
+                    double sampleR = mixBufferR[i];
+                    if (sampleL > 1.0) sampleL = 1.0;
+                    else if (sampleL < -1.0) sampleL = -1.0;
+                    if (sampleR > 1.0) sampleR = 1.0;
+                    else if (sampleR < -1.0) sampleR = -1.0;
 
-                    int pcm = (int) (sample * Short.MAX_VALUE);
-                    byteBuffer[i * 2] = (byte) (pcm & 0xFF);
-                    byteBuffer[i * 2 + 1] = (byte) ((pcm >> 8) & 0xFF);
+                    int pcmL = (int) (sampleL * Short.MAX_VALUE);
+                    int pcmR = (int) (sampleR * Short.MAX_VALUE);
+                    byteBuffer[i * 4]     = (byte) (pcmL & 0xFF);
+                    byteBuffer[i * 4 + 1] = (byte) ((pcmL >> 8) & 0xFF);
+                    byteBuffer[i * 4 + 2] = (byte) (pcmR & 0xFF);
+                    byteBuffer[i * 4 + 3] = (byte) ((pcmR >> 8) & 0xFF);
                 }
 
                 line.write(byteBuffer, 0, byteBuffer.length);

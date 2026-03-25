@@ -242,12 +242,12 @@ public class ParameterPanel extends JPanel implements Scrollable {
         card.add(crossfadeStepper);
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
 
-        dramaticSlider = new LabeledSlider("Dramatic", 0, 200,
-                (int) (params.dramaticFactor * 10),
-                v -> String.format("%.1f", v / 10.0));
+        dramaticSlider = new LabeledSlider("Dramatic", 1, 2000,
+                (int) (params.dramaticFactor * 100),
+                v -> String.format("%.2f", v / 100.0));
         dramaticSlider.setAlignmentX(0);
         dramaticSlider.addChangeListener(e ->
-                params.dramaticFactor = dramaticSlider.getValue() / 10.0);
+                params.dramaticFactor = dramaticSlider.getValue() / 100.0);
         card.add(dramaticSlider);
 
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
@@ -501,7 +501,7 @@ public class ParameterPanel extends JPanel implements Scrollable {
         synthReverbSlider.setValue((int) (params.synthReverbMix * 100));
         panSmoothSlider.setValue((int) (params.panSmoothing * 100));
         crossfadeStepper.setValue(params.crossfadeDuration);
-        dramaticSlider.setValue((int) (params.dramaticFactor * 10));
+        dramaticSlider.setValue((int) (params.dramaticFactor * 100));
         chordEnableToggle.setSelected(params.useChordMode);
         chordRatiosField.setText(arrayToString(params.chordRatios));
         chordAttacksField.setText(arrayToString(params.chordAttackTimes));

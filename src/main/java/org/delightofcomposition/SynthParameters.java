@@ -24,7 +24,7 @@ public class SynthParameters {
     public double controlRate = 0.1; // seconds between windows
 
     // Granular synthesis
-    public int grainsPerPeak = 10;
+    public int grainsPerPeak = 15;
     public double amplitudeThreshold = 0.05;
 
     // Reverb
@@ -35,7 +35,7 @@ public class SynthParameters {
     // Output
     public double panSmoothing = 0.5;
     public double crossfadeDuration = 0.5;
-    public double dramaticFactor = 10.0;
+    public double dramaticFactor = 0.01;
 
     // Chord mode
     public boolean useChordMode = false;
