@@ -6,6 +6,7 @@ import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.geom.Ellipse2D;
 import java.util.Random;
 import java.util.function.Supplier;
 
@@ -14,10 +15,11 @@ import javax.swing.JComponent;
 import org.delightofcomposition.envelopes.Envelope;
 
 /**
- * Dot-density timbral preview showing three envelopes:
- * - Density envelope → vertical extent of filled region
- * - Dynamics envelope → dot fill density
+ * Dot-density timbral preview showing four envelopes:
+ * - Density envelope → dot visibility (more density = more dots)
+ * - Dynamics envelope → dot size (louder = bigger)
  * - Mix envelope → color split (blue=synth at bottom, green=source above)
+ * - Pitch envelope → vertical height of dot field (higher pitch = taller)
  */
 public class TimbralPreview extends JComponent {
 
@@ -28,6 +30,8 @@ public class TimbralPreview extends JComponent {
     private final Envelope mixEnv;
     private final Envelope dynamicsEnv;
     private final Supplier<Boolean> dynamicsEnabled;
+    private final Envelope pitchEnv;
+    private final Supplier<Boolean> pitchEnabled;
 
     // Single unified dot grid (~30000 dots)
     private static final int COLS = 500;
@@ -38,11 +42,14 @@ public class TimbralPreview extends JComponent {
     private final int dotCount;
 
     public TimbralPreview(Envelope probEnv, Envelope mixEnv,
-                          Envelope dynamicsEnv, Supplier<Boolean> dynamicsEnabled) {
+                          Envelope dynamicsEnv, Supplier<Boolean> dynamicsEnabled,
+                          Envelope pitchEnv, Supplier<Boolean> pitchEnabled) {
         this.probEnv = probEnv;
         this.mixEnv = mixEnv;
         this.dynamicsEnv = dynamicsEnv;
         this.dynamicsEnabled = dynamicsEnabled;
+        this.pitchEnv = pitchEnv;
+        this.pitchEnabled = pitchEnabled;
         setPreferredSize(new Dimension(600, HEIGHT));
         setMinimumSize(new Dimension(100, HEIGHT));
         setMaximumSize(new Dimension(Integer.MAX_VALUE, HEIGHT));
@@ -85,29 +92,49 @@ public class TimbralPreview extends JComponent {
                 Theme.SUCCESS.getBlue(), 200);
 
         boolean dynOn = dynamicsEnabled.get();
+        boolean pitchOn = pitchEnabled.get();
         int usableH = h - 2;
 
-        // Single unified dot loop: density→height, dynamics→dot density
+        // Dot loop: density→visibility, dynamics→size, pitch→height, mix→color
         for (int i = 0; i < dotCount; i++) {
             double t = dotTx[i];
+
+            // density controls dot visibility (higher density = more dots)
             double density = getEnvValue(probEnv, t);
-            double dynamics = dynOn ? Math.max(0, interpolate(dynamicsEnv, t)) : MAX_GAIN;
+            if (dotThresh[i] >= density) continue;
 
-            // dynamics controls dot visibility (normalize to +6 dB max gain)
-            if (dotThresh[i] >= dynamics / MAX_GAIN) continue;
-
-            double totalH = density * usableH;
+            // dynamics controls vertical height in dB scale (+6 top, -60 bottom)
+            double dynH;
+            if (dynOn) {
+                double dynamics = Math.max(1e-6, interpolate(dynamicsEnv, t));
+                double dB = 20 * Math.log10(dynamics);
+                // Map dB to 0-1: +6 dB = 1.0, 0 dB ≈ 0.91, -60 dB = 0.0
+                dynH = clamp((dB + 60.0) / 66.0, 0.0, 1.0);
+            } else {
+                dynH = 1.0;
+            }
+            double totalH = dynH * usableH;
             double pyFromBottom = dotTy[i] * usableH;
             if (pyFromBottom > totalH) continue;
 
-            // color based on position relative to mix boundary
+            // mix controls color split
             double mix = getEnvValue(mixEnv, t);
             double synthH = totalH * (1.0 - mix);
             g2.setColor(pyFromBottom <= synthH ? synthColor : sourceColor);
 
+            // pitch controls dot size continuously (off = medium)
+            double dotSize;
+            if (pitchOn) {
+                double pitchRatio = Math.max(0.25, interpolate(pitchEnv, t));
+                double pitchNorm = clamp(Math.log(pitchRatio) / Math.log(2) / 4.0 + 0.5, 0.0, 1.0);
+                dotSize = Math.max(0.5, Math.min(5.0, pitchNorm * 4.0 + 0.5));
+            } else {
+                dotSize = 2.5;
+            }
+
             int px = (int) (t * (w - 1));
             int py = h - 1 - (int) pyFromBottom;
-            g2.fillRect(px, py, 2, 2);
+            g2.fill(new Ellipse2D.Double(px, py, dotSize, dotSize));
         }
 
         // Border
@@ -160,5 +187,9 @@ public class TimbralPreview extends JComponent {
 
     private double clamp(double v) {
         return Math.max(0, Math.min(1, v));
+    }
+
+    private double clamp(double v, double min, double max) {
+        return Math.max(min, Math.min(max, v));
     }
 }

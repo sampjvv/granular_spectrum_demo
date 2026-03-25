@@ -39,6 +39,8 @@ public class PresetManager {
         saveEnvelope(props, "dramaticEnvShape", params.dramaticEnvShape);
         saveEnvelope(props, "dynamicsEnv", params.dynamicsEnv);
         props.setProperty("useDynamicsEnv", String.valueOf(params.useDynamicsEnv));
+        saveEnvelope(props, "pitchEnv", params.pitchEnv);
+        props.setProperty("usePitchEnv", String.valueOf(params.usePitchEnv));
 
         try (FileOutputStream fos = new FileOutputStream(path)) {
             props.store(fos, "Granular Spectrum Synthesizer Preset");
@@ -96,6 +98,9 @@ public class PresetManager {
         params.dynamicsEnv = loadEnvelope(props, "dynamicsEnv", params.dynamicsEnv);
         params.useDynamicsEnv = Boolean.parseBoolean(
                 props.getProperty("useDynamicsEnv", "true"));
+        params.pitchEnv = loadEnvelope(props, "pitchEnv", params.pitchEnv);
+        params.usePitchEnv = Boolean.parseBoolean(
+                props.getProperty("usePitchEnv", "false"));
     }
 
     private static void saveEnvelope(Properties props, String prefix, Envelope env) {

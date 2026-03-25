@@ -41,6 +41,7 @@ import org.delightofcomposition.RenderController;
 import org.delightofcomposition.SynthParameters;
 import org.delightofcomposition.realtime.LiveMidiController;
 import org.delightofcomposition.sound.AudioPlayer;
+import org.delightofcomposition.sound.ReadSound;
 import org.delightofcomposition.sound.WaveWriter;
 
 /**
@@ -126,6 +127,11 @@ public class MainWindow extends JFrame {
                 progressBar.setString("Cancelled");
             }
         });
+
+        // Restore last session's sample files
+        params.sourceFile = SamplePreferences.loadSourceFile(params.sourceFile);
+        params.grainFile = SamplePreferences.loadGrainFile(params.grainFile);
+        params.impulseResponseFile = SamplePreferences.loadImpulseResponseFile(params.impulseResponseFile);
 
         buildMenuBar();
         buildToolbar();
@@ -351,9 +357,18 @@ public class MainWindow extends JFrame {
         envelopeScroll.getVerticalScrollBar().setUnitIncrement(16);
         Theme.styleScrollPane(envelopeScroll);
 
+        waveformDisplay.setTimbralPreview(envelopePanel.getTimbralPreview());
+
+        // Load source waveform into envelope backgrounds
+        loadSourceWaveform();
+        parameterPanel.setSourceFileChangeListener(file -> loadSourceWaveform());
+
+        envelopeScroll.setMinimumSize(new Dimension(0, 200));
+        waveformDisplay.setMinimumSize(new Dimension(0, 150));
+
         JSplitPane rightSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
                 envelopeScroll, waveformDisplay);
-        rightSplit.setResizeWeight(0.7);
+        rightSplit.setResizeWeight(0.6);
         rightSplit.setBorder(BorderFactory.createEmptyBorder());
 
         JSplitPane wavSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftScroll, rightSplit);
@@ -648,6 +663,33 @@ public class MainWindow extends JFrame {
             parameterPanel.syncFromParams();
             envelopePanel.syncFromParams();
         }
+    }
+
+    private void loadSourceWaveform() {
+        File src = params.sourceFile;
+        if (src == null) return;
+        new SwingWorker<float[], Void>() {
+            @Override
+            protected float[] doInBackground() {
+                try {
+                    return ReadSound.readSound(src.getPath());
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    return null;
+                }
+            }
+            @Override
+            protected void done() {
+                try {
+                    float[] samples = get();
+                    if (samples != null && envelopePanel != null) {
+                        envelopePanel.setWaveformData(samples);
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }.execute();
     }
 
     public static void main(String[] args) {

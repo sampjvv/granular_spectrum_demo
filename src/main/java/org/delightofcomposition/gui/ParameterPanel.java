@@ -17,6 +17,9 @@ import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.Scrollable;
 
+import java.io.File;
+import java.util.function.Consumer;
+
 import org.delightofcomposition.SynthParameters;
 import org.delightofcomposition.sound.AudioPlayer;
 import org.delightofcomposition.sound.ReadSound;
@@ -50,6 +53,7 @@ public class ParameterPanel extends JPanel implements Scrollable {
     private ToggleSwitch chordEnableToggle;
     private JTextField chordRatiosField;
     private JTextField chordAttacksField;
+    private Consumer<File> sourceFileChangeListener;
 
     public ParameterPanel(SynthParameters params) {
         this.params = params;
@@ -100,12 +104,19 @@ public class ParameterPanel extends JPanel implements Scrollable {
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
 
         sourceDropPanel = new SampleDropPanel("Source Sample", params.sourceFile,
-                file -> params.sourceFile = file);
+                file -> {
+                    params.sourceFile = file;
+                    SamplePreferences.saveSourceFile(file);
+                    if (sourceFileChangeListener != null) sourceFileChangeListener.accept(file);
+                });
         card.add(sampleRow(sourceDropPanel));
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
 
         grainDropPanel = new SampleDropPanel("Grain Sample", params.grainFile,
-                file -> params.grainFile = file);
+                file -> {
+                    params.grainFile = file;
+                    SamplePreferences.saveGrainFile(file);
+                });
         card.add(sampleRow(grainDropPanel));
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
 
@@ -121,7 +132,10 @@ public class ParameterPanel extends JPanel implements Scrollable {
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
 
         irDropPanel = new SampleDropPanel("Impulse Response", params.impulseResponseFile,
-                file -> params.impulseResponseFile = file);
+                file -> {
+                    params.impulseResponseFile = file;
+                    SamplePreferences.saveImpulseResponseFile(file);
+                });
         card.add(sampleRow(irDropPanel));
 
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
@@ -458,6 +472,10 @@ public class ParameterPanel extends JPanel implements Scrollable {
             sb.append(arr[i] == (int) arr[i] ? String.valueOf((int) arr[i]) : String.valueOf(arr[i]));
         }
         return sb.toString();
+    }
+
+    public void setSourceFileChangeListener(Consumer<File> listener) {
+        this.sourceFileChangeListener = listener;
     }
 
     // ── Scrollable — force panel width to match viewport ──

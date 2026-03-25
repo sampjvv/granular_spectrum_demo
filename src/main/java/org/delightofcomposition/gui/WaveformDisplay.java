@@ -28,6 +28,7 @@ public class WaveformDisplay extends JPanel {
     private float[][] stereoBuffer;
     private final SegmentedControl tabs;
     private final WaveformCanvas canvas;
+    private final JPanel card;
     private BufferedImage spectrogramImage;
     private volatile boolean computingSpectrogram = false;
 
@@ -37,7 +38,7 @@ public class WaveformDisplay extends JPanel {
         setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
         // Card wrapper
-        JPanel card = new JPanel(new BorderLayout(0, 6)) {
+        card = new JPanel(new BorderLayout(0, 6)) {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -72,6 +73,16 @@ public class WaveformDisplay extends JPanel {
         tabs.addChangeListener(e -> canvas.repaint());
 
         add(card);
+    }
+
+    public void setTimbralPreview(TimbralPreview preview) {
+        JPanel south = new JPanel(new BorderLayout(0, 4));
+        south.setOpaque(false);
+        south.setBorder(BorderFactory.createEmptyBorder(6, 0, 0, 0));
+        south.add(Theme.sectionLabel("Timbral Blend"), BorderLayout.NORTH);
+        south.add(preview, BorderLayout.CENTER);
+        card.add(south, BorderLayout.SOUTH);
+        card.revalidate();
     }
 
     public void setBuffer(float[][] buffer) {

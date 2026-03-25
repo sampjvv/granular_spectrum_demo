@@ -65,6 +65,12 @@ public class SynthParameters {
             new double[]{1, 1});
     public boolean useDynamicsEnv = true;
 
+    // Pitch envelope (values are frequency ratios: 1.0 = no change, 2.0 = octave up, 0.5 = octave down)
+    public Envelope pitchEnv = new Envelope(
+            new double[]{0, 1.0},
+            new double[]{1.0, 1.0});
+    public boolean usePitchEnv = false;
+
     public int getWindowSize() {
         return (int) Math.pow(2, windowSizeExponent);
     }
@@ -99,6 +105,8 @@ public class SynthParameters {
         copy.crispMixEnv = cloneEnvelope(this.crispMixEnv);
         copy.dynamicsEnv = cloneEnvelope(this.dynamicsEnv);
         copy.useDynamicsEnv = this.useDynamicsEnv;
+        copy.pitchEnv = cloneEnvelope(this.pitchEnv);
+        copy.usePitchEnv = this.usePitchEnv;
         return copy;
     }
 

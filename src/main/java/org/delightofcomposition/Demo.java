@@ -85,6 +85,8 @@ public class Demo {
         int grainsPerPeak = params.grainsPerPeak;
         Envelope probEnv = params.probEnv;
         Envelope mixEnv = params.mixEnv;
+        Envelope pitchEnv = params.pitchEnv;
+        boolean usePitchEnv = params.usePitchEnv;
         String irPath = params.impulseResponseFile.getPath();
 
         double totalDuration = fullSound.length / (double) WaveWriter.SAMPLE_RATE;
@@ -124,7 +126,7 @@ public class Demo {
 
                         processWindow(time, sourceSound, synth, windowSize,
                                 controlRate, amplitudeThreshold, grainsPerPeak,
-                                probEnv, localBuf, rng);
+                                probEnv, pitchEnv, usePitchEnv, localBuf, rng);
 
                         int done = completedWindows.incrementAndGet();
                         if (progress != null) {
@@ -168,6 +170,22 @@ public class Demo {
         Normalize.normalize(outSig);
         Normalize.normalize(fullSound);
 
+        // Apply pitch envelope to source audio via time-varying resampling
+        if (params.usePitchEnv && params.pitchEnv != null) {
+            double[] pitchedSource = new double[fullSound.length];
+            double readPointer = 0.0;
+            for (int i = 0; i < pitchedSource.length; i++) {
+                double ratio = params.pitchEnv.getValue(i / (double) origLen);
+                int index = (int) readPointer;
+                if (index >= fullSound.length - 1) break;
+                double fract = readPointer - index;
+                pitchedSource[i] = fullSound[index] * (1 - fract)
+                        + fullSound[Math.min(index + 1, fullSound.length - 1)] * fract;
+                readPointer += ratio;
+            }
+            fullSound = pitchedSource;
+        }
+
         for (int i = 0; i < fullSound.length; i++) {
             double percComplete = i / (double) origLen;
             double mix = mixEnv.getValue(percComplete);
@@ -201,7 +219,8 @@ public class Demo {
 
     private static void processWindow(double time, double[] fullSound, Synth synth,
             int windowSize, double controlRate, double amplitudeThreshold,
-            int grainsPerPeak, Envelope probEnv, double[] outBuf, Random rng) {
+            int grainsPerPeak, Envelope probEnv, Envelope pitchEnv, boolean usePitchEnv,
+            double[] outBuf, Random rng) {
 
         int fftStart = (int) (time * WaveWriter.SAMPLE_RATE) - windowSize / 2;
         int fftEnd = (int) (time * WaveWriter.SAMPLE_RATE) + windowSize / 2;
@@ -245,7 +264,12 @@ public class Demo {
                 double prob = probEnv.getValue(t / (double) fullSound.length);
 
                 if (rng.nextDouble() < prob) {
-                    double[] tone = synth.note(peakFreq, peakAmp);
+                    double actualFreq = peakFreq;
+                    if (usePitchEnv && pitchEnv != null) {
+                        double ratio = pitchEnv.getValue(t / (double) fullSound.length);
+                        actualFreq = peakFreq * ratio;
+                    }
+                    double[] tone = synth.note(actualFreq, peakAmp);
                     for (int j = 0; j < tone.length && (j + t) < outBuf.length; j++) {
                         outBuf[j + t] += tone[j];
                     }
@@ -288,6 +312,8 @@ public class Demo {
         double amplitudeThreshold = params.amplitudeThreshold;
         int grainsPerPeak = params.grainsPerPeak;
         Envelope probEnv = new Envelope(new double[]{0, 1}, new double[]{layerDensity, layerDensity});
+        Envelope pitchEnv = params.pitchEnv;
+        boolean usePitchEnv = params.usePitchEnv;
 
         double totalDuration = fullSound.length / (double) WaveWriter.SAMPLE_RATE;
         final double[] sourceSound = fullSound;
@@ -324,7 +350,7 @@ public class Demo {
 
                         processWindow(time, sourceSound, synth, windowSize,
                                 controlRate, amplitudeThreshold, grainsPerPeak,
-                                probEnv, localBuf, rng);
+                                probEnv, pitchEnv, usePitchEnv, localBuf, rng);
 
                         int done = completedWindows.incrementAndGet();
                         if (progress != null) {
