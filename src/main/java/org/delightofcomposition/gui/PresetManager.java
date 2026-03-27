@@ -16,6 +16,8 @@ public class PresetManager {
     public static void save(SynthParameters params, String path) {
         Properties props = new Properties();
         props.setProperty("sourceFile", params.sourceFile.getPath());
+        props.setProperty("sourceStartFraction", String.valueOf(params.sourceStartFraction));
+        props.setProperty("sourceEndFraction", String.valueOf(params.sourceEndFraction));
         props.setProperty("grainFile", params.grainFile.getPath());
         props.setProperty("impulseResponseFile", params.impulseResponseFile.getPath());
         props.setProperty("grainReferenceFreq", String.valueOf(params.grainReferenceFreq));
@@ -59,6 +61,10 @@ public class PresetManager {
         }
 
         params.sourceFile = new File(props.getProperty("sourceFile", params.sourceFile.getPath()));
+        params.sourceStartFraction = Double.parseDouble(
+                props.getProperty("sourceStartFraction", "0.0"));
+        params.sourceEndFraction = Double.parseDouble(
+                props.getProperty("sourceEndFraction", "1.0"));
         params.grainFile = new File(props.getProperty("grainFile", params.grainFile.getPath()));
         params.impulseResponseFile = new File(props.getProperty("impulseResponseFile",
                 params.impulseResponseFile.getPath()));

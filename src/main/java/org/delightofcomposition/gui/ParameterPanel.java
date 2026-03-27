@@ -20,8 +20,11 @@ import javax.swing.Scrollable;
 import java.io.File;
 import java.util.function.Consumer;
 
+import javax.swing.SwingWorker;
+
 import org.delightofcomposition.SynthParameters;
 import org.delightofcomposition.sound.AudioPlayer;
+import org.delightofcomposition.sound.FFT2;
 import org.delightofcomposition.sound.ReadSound;
 import org.delightofcomposition.sound.WaveWriter;
 
@@ -72,6 +75,11 @@ public class ParameterPanel extends JPanel implements Scrollable {
         add(Box.createVerticalGlue());
 
         registerHelpTexts();
+
+        // Auto-detect grain pitch on startup if a grain sample is already loaded
+        if (params.grainFile != null && params.grainFile.exists()) {
+            detectGrainPitch(params.grainFile);
+        }
     }
 
     private void registerHelpTexts() {
@@ -116,6 +124,7 @@ public class ParameterPanel extends JPanel implements Scrollable {
                 file -> {
                     params.grainFile = file;
                     SamplePreferences.saveGrainFile(file);
+                    detectGrainPitch(file);
                 });
         card.add(sampleRow(grainDropPanel));
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
@@ -124,7 +133,7 @@ public class ParameterPanel extends JPanel implements Scrollable {
         refLabel.setAlignmentX(0);
         card.add(refLabel);
         card.add(Box.createVerticalStrut(Theme.LABEL_GAP));
-        refFreqStepper = new StepperControl(params.grainReferenceFreq, 20, 20000, 1, "%.0f Hz");
+        refFreqStepper = new StepperControl(params.grainReferenceFreq, 20, 20000, 0.1, "%.1f Hz");
         refFreqStepper.setAlignmentX(0);
         refFreqStepper.addChangeListener(e -> params.grainReferenceFreq = refFreqStepper.getDoubleValue());
 
@@ -503,6 +512,43 @@ public class ParameterPanel extends JPanel implements Scrollable {
     @Override
     public boolean getScrollableTracksViewportHeight() {
         return false;
+    }
+
+    private void detectGrainPitch(File grainFile) {
+        if (grainFile == null || !grainFile.exists()) return;
+        System.out.println("[PitchDetect] Analyzing: " + grainFile.getName());
+        new SwingWorker<Double, Void>() {
+            @Override
+            protected Double doInBackground() {
+                double[] samples = ReadSound.readSoundDoubles(grainFile.getPath());
+                if (samples == null || samples.length == 0) {
+                    System.err.println("[PitchDetect] Failed to read grain sample");
+                    return null;
+                }
+                System.out.println("[PitchDetect] Sample length: " + samples.length
+                        + " (" + String.format("%.2f", samples.length / (double) WaveWriter.SAMPLE_RATE) + "s)");
+                double freq = FFT2.getPitch(samples, WaveWriter.SAMPLE_RATE);
+                System.out.println("[PitchDetect] Raw detected: " + String.format("%.2f", freq) + " Hz");
+                return freq;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    Double freq = get();
+                    if (freq != null && freq >= 20 && freq <= 20000) {
+                        params.grainReferenceFreq = freq;
+                        refFreqStepper.setValue(freq);
+                        System.out.println("[PitchDetect] Applied: " + String.format("%.1f", freq) + " Hz");
+                    } else {
+                        System.err.println("[PitchDetect] Frequency out of range: " + freq);
+                    }
+                } catch (Exception e) {
+                    System.err.println("[PitchDetect] Failed: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }
+        }.execute();
     }
 
     public void syncFromParams() {

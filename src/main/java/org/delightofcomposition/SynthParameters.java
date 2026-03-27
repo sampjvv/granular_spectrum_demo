@@ -16,6 +16,10 @@ public class SynthParameters {
     public File grainFile = new File("resources/bell.wav");
     public File impulseResponseFile = new File("resources/cathedral.wav");
 
+    // Source region selection (fractions of source sample, 0.0–1.0)
+    public double sourceStartFraction = 0.0;
+    public double sourceEndFraction = 1.0;
+
     // Grain synth
     public double grainReferenceFreq = 1287;
 
@@ -82,6 +86,8 @@ public class SynthParameters {
     public SynthParameters snapshot() {
         SynthParameters copy = new SynthParameters();
         copy.sourceFile = this.sourceFile;
+        copy.sourceStartFraction = this.sourceStartFraction;
+        copy.sourceEndFraction = this.sourceEndFraction;
         copy.grainFile = this.grainFile;
         copy.impulseResponseFile = this.impulseResponseFile;
         copy.grainReferenceFreq = this.grainReferenceFreq;

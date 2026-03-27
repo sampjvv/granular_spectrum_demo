@@ -42,6 +42,9 @@ public class RenderController {
             @Override
             protected float[][] doInBackground() {
                 double[] sample = ReadSound.readSoundDoubles(snap.sourceFile.getPath());
+
+                // Extract selected region
+                sample = extractRegion(sample, snap);
                 int origlen = sample.length;
 
                 if (!snap.useChordMode) {
@@ -56,7 +59,7 @@ public class RenderController {
                     for (int i = 0; i < sound.length; i++) {
                         double pan = Math.min(
                                 snap.panSmoothing * 0.5
-                                        + (1 - snap.panSmoothing) * 0.5 * (i / (double) origlen),
+                                        + (1 - snap.panSmoothing) * 0.5 * (i / (double) sound.length),
                                 1);
                         ww.df[0][i] += (float) (pan * sound[i]);
                         ww.df[1][i] += (float) ((1 - pan) * sound[i]);
@@ -128,6 +131,7 @@ public class RenderController {
             double ratio = ratios[n];
             double attackTime = attacktimes[n];
             double[] sample = ReadSound.readSoundDoubles(snap.sourceFile.getPath());
+            sample = extractRegion(sample, snap);
             sample = ChangeSpeed.changeSpeed(sample, ratio, 1);
             int sampleLen = sample.length;
 
@@ -172,6 +176,7 @@ public class RenderController {
                 int startForEndAlignment = fundLen - sampleLen;
                 if (startForEndAlignment >= 0) {
                     sample = ReadSound.readSoundDoubles(snap.sourceFile.getPath());
+                    sample = extractRegion(sample, snap);
                     sample = ChangeSpeed.changeSpeed(sample, ratio, 1);
                     double[] softAttack = Demo.demo(sample, snap, null);
                     if (softAttack == null) return null;
@@ -245,6 +250,15 @@ public class RenderController {
             df[0][i] *= gain;
             df[1][i] *= gain;
         }
+    }
+
+    private static double[] extractRegion(double[] sample, SynthParameters snap) {
+        int start = (int) (snap.sourceStartFraction * sample.length);
+        int end = (int) (snap.sourceEndFraction * sample.length);
+        start = Math.max(0, start);
+        end = Math.min(sample.length, end);
+        if (end - start < 1000) end = Math.min(sample.length, start + 1000);
+        return Arrays.copyOfRange(sample, start, end);
     }
 
     public void cancel() {

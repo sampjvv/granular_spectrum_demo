@@ -88,16 +88,34 @@ public class FFT2 {
     }
 
     public static double getPitch(double[] sig, int sampleRate) {
-        double f = 0;
         double[][] realFreqDom = forwardTransform(sig);
+        int N = realFreqDom[0].length;
+        int halfN = N / 2; // only search below Nyquist (real signal is symmetric)
+
+        // Skip bin 0 (DC) and very low bins — start from bin corresponding to ~20 Hz
+        int minBin = Math.max(1, (int) (20.0 * N / sampleRate));
         double maxAmp = 0;
-        for (int i = 0; i < realFreqDom[0].length; i++) {
+        int peakBin = minBin;
+        for (int i = minBin; i < halfN; i++) {
             if (realFreqDom[0][i] > maxAmp) {
                 maxAmp = realFreqDom[0][i];
-                f = (i + 1) / (double) (realFreqDom[0].length);
+                peakBin = i;
             }
         }
-        return f * sampleRate;
+
+        // Parabolic interpolation around peak for sub-bin accuracy
+        double refinedBin = peakBin;
+        if (peakBin > 0 && peakBin < halfN - 1) {
+            double alpha = realFreqDom[0][peakBin - 1];
+            double beta  = realFreqDom[0][peakBin];
+            double gamma = realFreqDom[0][peakBin + 1];
+            double denom = alpha - 2 * beta + gamma;
+            if (Math.abs(denom) > 1e-12) {
+                refinedBin = peakBin + 0.5 * (alpha - gamma) / denom;
+            }
+        }
+
+        return refinedBin * sampleRate / (double) N;
     }
 
     // matches the second to the first

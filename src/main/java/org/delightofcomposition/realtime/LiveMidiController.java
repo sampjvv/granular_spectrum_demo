@@ -6,6 +6,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.function.Consumer;
 
@@ -35,14 +36,22 @@ public class LiveMidiController {
 
     private volatile boolean running;
     private volatile boolean starting;
+    private final AtomicBoolean layerCancelled = new AtomicBoolean(false);
 
     public void start(SynthParameters params, Consumer<Integer> progress) {
         if (running || starting) return;
         starting = true;
+        layerCancelled.set(false);
 
         try {
-            // Load and normalize source sample
-            double[] sourceSample = ReadSound.readSoundDoubles(params.sourceFile.getPath());
+            // Load and normalize source sample, applying region selection
+            double[] rawSource = ReadSound.readSoundDoubles(params.sourceFile.getPath());
+            int regionStart = (int) (params.sourceStartFraction * rawSource.length);
+            int regionEnd = (int) (params.sourceEndFraction * rawSource.length);
+            regionStart = Math.max(0, regionStart);
+            regionEnd = Math.min(rawSource.length, regionEnd);
+            if (regionEnd - regionStart < 1000) regionEnd = Math.min(rawSource.length, regionStart + 1000);
+            final double[] sourceSample = java.util.Arrays.copyOfRange(rawSource, regionStart, regionEnd);
             Normalize.normalize(sourceSample);
 
             // Detect fundamental frequency via spectral analysis
@@ -69,7 +78,7 @@ public class LiveMidiController {
                             progress.accept(sum / NUM_LAYERS);
                         }
                     };
-                    return Demo.renderGranularLayer(sourceSample, params, seedOffset, density, layerCb);
+                    return Demo.renderGranularLayer(sourceSample, params, seedOffset, density, layerCb, layerCancelled);
                 }));
             }
 
@@ -87,6 +96,32 @@ public class LiveMidiController {
             }
             layerPool.shutdown();
             if (progress != null) progress.accept(100);
+
+            // Diagnostic: verify layers have actual content
+            for (int i = 0; i < NUM_LAYERS; i++) {
+                double peak = 0;
+                for (double v : granularLayers[i]) peak = Math.max(peak, Math.abs(v));
+                System.out.println("[LiveMidi] Layer " + i + ": len=" + granularLayers[i].length
+                        + " peak=" + String.format("%.6f", peak)
+                        + " density=" + LAYER_DENSITIES[i]);
+            }
+            {
+                double srcPeak = 0;
+                for (double v : sourceSample) srcPeak = Math.max(srcPeak, Math.abs(v));
+                System.out.println("[LiveMidi] Source sample: len=" + sourceSample.length
+                        + " peak=" + String.format("%.6f", srcPeak));
+                // Check if layer 0 and source are identical (should NOT be)
+                boolean identical = (granularLayers[0].length == sourceSample.length);
+                if (identical) {
+                    for (int i = 0; i < Math.min(1000, sourceSample.length); i++) {
+                        if (Math.abs(granularLayers[0][i] - sourceSample[i]) > 1e-10) {
+                            identical = false;
+                            break;
+                        }
+                    }
+                }
+                System.out.println("[LiveMidi] Layer0 == Source? " + identical);
+            }
 
             // Create engine components
             controlState = new ControlState();
@@ -123,12 +158,12 @@ public class LiveMidiController {
     }
 
     public void cancel() {
-        Demo.cancelled = true;
+        layerCancelled.set(true);
     }
 
     public void stop() {
         if (starting) {
-            Demo.cancelled = true;
+            layerCancelled.set(true);
             return;
         }
         if (!running) return;

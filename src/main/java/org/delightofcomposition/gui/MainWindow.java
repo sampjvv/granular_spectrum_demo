@@ -69,6 +69,11 @@ public class MainWindow extends JFrame {
     private EnvelopeEditorPanel envelopePanel;
     private WaveformDisplay waveformDisplay;
     private JButton helpBtn;
+    private JButton saveToLibBtn;
+    private JButton liveSavePresetBtn;
+    private LibraryPanel libraryPanel;
+    private SourceRegionSelector regionSelector;
+    private float[] fullSourceWaveform; // stored for re-slicing on region change
     private JPanel toolbar;
 
     // Live mode controls
@@ -105,6 +110,7 @@ public class MainWindow extends JFrame {
                 renderBtn.setEnabled(true);
                 playBtn.setEnabled(true);
                 exportBtn.setEnabled(true);
+                saveToLibBtn.setEnabled(true);
                 progressBar.setValue(100);
                 progressBar.setString("Done");
                 if (waveformDisplay != null) {
@@ -141,6 +147,7 @@ public class MainWindow extends JFrame {
         playBtn.setEnabled(false);
         stopBtn.setEnabled(true);
         exportBtn.setEnabled(false);
+        saveToLibBtn.setEnabled(false);
         progressBar.setString("Ready");
 
         // Window close: stop live engine if running
@@ -270,6 +277,12 @@ public class MainWindow extends JFrame {
         exportBtn.addActionListener(e -> doExport());
         wavToolbar.add(exportBtn);
 
+        saveToLibBtn = Theme.secondaryButton("Save to Library");
+        saveToLibBtn.setPreferredSize(new Dimension(130, 34));
+        saveToLibBtn.setToolTipText("Save render + settings to library");
+        saveToLibBtn.addActionListener(e -> doSaveToLibrary());
+        wavToolbar.add(saveToLibBtn);
+
         helpBtn = Theme.ghostButton("?");
         helpBtn.setPreferredSize(new Dimension(34, 34));
         helpBtn.setToolTipText("Toggle help tooltips");
@@ -303,6 +316,12 @@ public class MainWindow extends JFrame {
         liveStopBtn.addActionListener(e -> stopLiveMode());
         liveToolbar.add(liveStopBtn);
 
+        liveSavePresetBtn = Theme.secondaryButton("Save to Library");
+        liveSavePresetBtn.setPreferredSize(new Dimension(130, 34));
+        liveSavePresetBtn.setToolTipText("Save current settings as a live preset");
+        liveSavePresetBtn.addActionListener(e -> doSaveLivePreset());
+        liveToolbar.add(liveSavePresetBtn);
+
         JButton liveHelpBtn = Theme.ghostButton("?");
         liveHelpBtn.setPreferredSize(new Dimension(34, 34));
         liveHelpBtn.setToolTipText("Toggle help tooltips");
@@ -333,6 +352,12 @@ public class MainWindow extends JFrame {
 
         toolbar.add(toolbarCards, BorderLayout.CENTER);
 
+        JButton libraryToggle = Theme.ghostButton("Library");
+        libraryToggle.setPreferredSize(new Dimension(80, 34));
+        libraryToggle.setToolTipText("Toggle library sidebar (Ctrl+L)");
+        libraryToggle.addActionListener(e -> toggleLibrary());
+        toolbar.add(libraryToggle, BorderLayout.EAST);
+
         add(toolbar, BorderLayout.NORTH);
     }
 
@@ -359,15 +384,28 @@ public class MainWindow extends JFrame {
 
         waveformDisplay.setTimbralPreview(envelopePanel.getTimbralPreview());
 
-        // Load source waveform into envelope backgrounds
+        // Region selector above envelopes
+        regionSelector = new SourceRegionSelector(params);
+        regionSelector.addChangeListener(e -> onRegionChanged());
+
+        // Load source waveform into envelope backgrounds + region selector
         loadSourceWaveform();
-        parameterPanel.setSourceFileChangeListener(file -> loadSourceWaveform());
+        parameterPanel.setSourceFileChangeListener(file -> {
+            params.sourceStartFraction = 0.0;
+            params.sourceEndFraction = 1.0;
+            loadSourceWaveform();
+        });
+
+        JPanel envelopeWrapper = new JPanel(new BorderLayout(0, 4));
+        envelopeWrapper.setOpaque(false);
+        envelopeWrapper.add(regionSelector, BorderLayout.NORTH);
+        envelopeWrapper.add(envelopeScroll, BorderLayout.CENTER);
 
         envelopeScroll.setMinimumSize(new Dimension(0, 200));
         waveformDisplay.setMinimumSize(new Dimension(0, 150));
 
         JSplitPane rightSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
-                envelopeScroll, waveformDisplay);
+                envelopeWrapper, waveformDisplay);
         rightSplit.setResizeWeight(0.6);
         rightSplit.setBorder(BorderFactory.createEmptyBorder());
 
@@ -403,7 +441,33 @@ public class MainWindow extends JFrame {
 
         contentCards.add(liveSplit, LIVE_MODE);
 
-        add(contentCards, BorderLayout.CENTER);
+        // Library sidebar
+        libraryPanel = new LibraryPanel(new LibraryPanel.LibraryCallback() {
+            @Override
+            public void onLoadPreset(java.io.File propsFile) {
+                PresetManager.load(params, propsFile.getPath());
+                parameterPanel.syncFromParams();
+                envelopePanel.syncFromParams();
+                loadSourceWaveform();
+            }
+
+            @Override
+            public void onUpdateEntry(SoundLibrary.LibraryEntry entry, boolean isRender) {
+                envelopePanel.syncToParams();
+                if (isRender && renderedBuffer != null) {
+                    SoundLibrary.updateRender(entry, renderedBuffer, params);
+                } else {
+                    SoundLibrary.updateLivePreset(entry, params);
+                }
+            }
+        });
+        libraryPanel.setVisible(false);
+
+        JPanel mainWithLibrary = new JPanel(new BorderLayout());
+        mainWithLibrary.add(contentCards, BorderLayout.CENTER);
+        mainWithLibrary.add(libraryPanel, BorderLayout.EAST);
+
+        add(mainWithLibrary, BorderLayout.CENTER);
     }
 
     private void onModeSwitch() {
@@ -556,6 +620,15 @@ public class MainWindow extends JFrame {
             }
         });
 
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_L, KeyEvent.CTRL_DOWN_MASK), "toggleLibrary");
+        root.getActionMap().put("toggleLibrary", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                toggleLibrary();
+            }
+        });
+
         // Arrow keys: mix (left/right) and density (up/down) in live mode.
         // Uses KeyEventDispatcher to intercept BEFORE focused sliders consume them.
         KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(ke -> {
@@ -595,6 +668,7 @@ public class MainWindow extends JFrame {
         renderBtn.setEnabled(false);
         playBtn.setEnabled(false);
         exportBtn.setEnabled(false);
+        saveToLibBtn.setEnabled(false);
         progressBar.setString("Rendering...");
         renderController.render(params);
     }
@@ -642,6 +716,34 @@ public class MainWindow extends JFrame {
         }
     }
 
+    private void doSaveToLibrary() {
+        if (renderedBuffer == null) return;
+        envelopePanel.syncToParams();
+        SoundLibrary.saveRender(renderedBuffer, params);
+        if (libraryPanel != null) {
+            libraryPanel.refresh();
+            if (!libraryPanel.isVisible()) toggleLibrary();
+        }
+    }
+
+    private void doSaveLivePreset() {
+        envelopePanel.syncToParams();
+        SoundLibrary.saveLivePreset(params);
+        if (libraryPanel != null) {
+            libraryPanel.refresh();
+            if (!libraryPanel.isVisible()) toggleLibrary();
+        }
+    }
+
+    private void toggleLibrary() {
+        if (libraryPanel != null) {
+            boolean show = !libraryPanel.isVisible();
+            if (show) libraryPanel.refresh();
+            libraryPanel.setVisible(show);
+            libraryPanel.getParent().revalidate();
+        }
+    }
+
     private void doSavePreset() {
         JFileChooser chooser = new JFileChooser(System.getProperty("user.dir"));
         chooser.setFileFilter(new FileNameExtensionFilter("Properties files", "properties"));
@@ -682,14 +784,34 @@ public class MainWindow extends JFrame {
             protected void done() {
                 try {
                     float[] samples = get();
-                    if (samples != null && envelopePanel != null) {
-                        envelopePanel.setWaveformData(samples);
+                    if (samples != null) {
+                        fullSourceWaveform = samples;
+                        if (regionSelector != null) {
+                            regionSelector.setWaveformData(samples);
+                        }
+                        updateEnvelopeWaveform();
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
             }
         }.execute();
+    }
+
+    private void onRegionChanged() {
+        updateEnvelopeWaveform();
+        if (regionSelector != null) regionSelector.repaint();
+    }
+
+    private void updateEnvelopeWaveform() {
+        if (fullSourceWaveform == null || envelopePanel == null) return;
+        int start = (int) (params.sourceStartFraction * fullSourceWaveform.length);
+        int end = (int) (params.sourceEndFraction * fullSourceWaveform.length);
+        start = Math.max(0, start);
+        end = Math.min(fullSourceWaveform.length, end);
+        if (end <= start) return;
+        float[] region = java.util.Arrays.copyOfRange(fullSourceWaveform, start, end);
+        envelopePanel.setWaveformData(region);
     }
 
     public static void main(String[] args) {

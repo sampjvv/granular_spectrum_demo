@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
@@ -61,14 +62,34 @@ public class Demo {
     public static volatile boolean cancelled = false;
 
     /**
+     * Computes the average pitch ratio from the pitch envelope by sampling it.
+     * Returns 1.0 if pitch envelope is disabled.
+     */
+    static double computeAvgPitchRatio(Envelope pitchEnv, boolean usePitchEnv) {
+        if (!usePitchEnv || pitchEnv == null) return 1.0;
+        double sum = 0;
+        int N = 200;
+        for (int i = 0; i <= N; i++) {
+            sum += pitchEnv.getValue(i / (double) N);
+        }
+        double avg = sum / (N + 1);
+        return Math.max(0.01, avg); // safety: avoid division by zero
+    }
+
+    /**
      * Fully parameterized overload. All constants come from params.
      * progress callback receives percentage (0-100). Can be null.
      */
     public static double[] demo(double[] fullSound, SynthParameters params, Consumer<Integer> progress) {
         cancelled = false;
 
-        // Allocate output buffer sized to source + generous margin for reverb tail
-        int outLength = fullSound.length + WaveWriter.SAMPLE_RATE * 30; // 30s margin
+        int sourceLen = fullSound.length;
+        double avgPitchRatio = computeAvgPitchRatio(params.pitchEnv, params.usePitchEnv);
+        int outputLen = (int) (sourceLen / avgPitchRatio);
+        outputLen = Math.max(outputLen, WaveWriter.SAMPLE_RATE); // minimum 1 second
+
+        // Allocate output buffer sized to output + generous margin for reverb tail
+        int outLength = outputLen + WaveWriter.SAMPLE_RATE * 30; // 30s margin
         double[] outSig = new double[outLength];
 
         // A synth to make the grains
@@ -89,10 +110,11 @@ public class Demo {
         boolean usePitchEnv = params.usePitchEnv;
         String irPath = params.impulseResponseFile.getPath();
 
-        double totalDuration = fullSound.length / (double) WaveWriter.SAMPLE_RATE;
+        double totalDuration = sourceLen / (double) WaveWriter.SAMPLE_RATE;
         final double[] sourceSound = fullSound;
+        final int finalOutputLen = outputLen;
 
-        // Build list of window times
+        // Build list of window times (based on source duration)
         List<Double> windowTimes = new ArrayList<>();
         for (double time = controlRate; time < totalDuration - controlRate; time += controlRate) {
             windowTimes.add(time);
@@ -126,7 +148,8 @@ public class Demo {
 
                         processWindow(time, sourceSound, synth, windowSize,
                                 controlRate, amplitudeThreshold, grainsPerPeak,
-                                probEnv, pitchEnv, usePitchEnv, localBuf, rng);
+                                probEnv, pitchEnv, usePitchEnv, localBuf, rng,
+                                finalOutputLen);
 
                         int done = completedWindows.incrementAndGet();
                         if (progress != null) {
@@ -153,8 +176,6 @@ public class Demo {
 
         if (cancelled) return null;
 
-        int origLen = fullSound.length;
-
         // apply reverb to original sample
         double[] wet = params.useReverb ? Reverb.generateWet(fullSound, irPath) : fullSound;
         Normalize.normalize(fullSound);
@@ -171,11 +192,12 @@ public class Demo {
         Normalize.normalize(fullSound);
 
         // Apply pitch envelope to source audio via time-varying resampling
+        // Resample into outputLen samples (pitch ratio changes read speed)
         if (params.usePitchEnv && params.pitchEnv != null) {
-            double[] pitchedSource = new double[fullSound.length];
+            double[] pitchedSource = new double[outputLen];
             double readPointer = 0.0;
-            for (int i = 0; i < pitchedSource.length; i++) {
-                double ratio = params.pitchEnv.getValue(i / (double) origLen);
+            for (int i = 0; i < outputLen; i++) {
+                double ratio = params.pitchEnv.getValue(i / (double) outputLen);
                 int index = (int) readPointer;
                 if (index >= fullSound.length - 1) break;
                 double fract = readPointer - index;
@@ -186,13 +208,14 @@ public class Demo {
             fullSound = pitchedSource;
         }
 
-        for (int i = 0; i < fullSound.length; i++) {
-            double percComplete = i / (double) origLen;
+        // Mix granular and source across outputLen
+        for (int i = 0; i < outputLen && i < fullSound.length; i++) {
+            double percComplete = i / (double) outputLen;
             double mix = mixEnv.getValue(percComplete);
             outSig[i] = (float) (((1 - mix) * outSig[i]) + (mix * fullSound[i]));
         }
 
-        outSig = Arrays.copyOf(outSig, fullSound.length);
+        outSig = Arrays.copyOf(outSig, outputLen);
 
         if (progress != null) progress.accept(100);
         return outSig;
@@ -220,8 +243,9 @@ public class Demo {
     private static void processWindow(double time, double[] fullSound, Synth synth,
             int windowSize, double controlRate, double amplitudeThreshold,
             int grainsPerPeak, Envelope probEnv, Envelope pitchEnv, boolean usePitchEnv,
-            double[] outBuf, Random rng) {
+            double[] outBuf, Random rng, int outputLen) {
 
+        double timeScale = outputLen / (double) fullSound.length;
         int fftStart = (int) (time * WaveWriter.SAMPLE_RATE) - windowSize / 2;
         int fftEnd = (int) (time * WaveWriter.SAMPLE_RATE) + windowSize / 2;
         fftStart = Math.max(0, fftStart);
@@ -236,8 +260,8 @@ public class Demo {
         double[][] spec = FFT.getTransformRaw(fftSample);
         int halfLen = spec[0].length / 2 + 1;
 
-        int firstSoundingFrame = (int) ((time - controlRate) * (double) WaveWriter.SAMPLE_RATE);
-        int lastFrame = (int) ((time + controlRate) * (double) WaveWriter.SAMPLE_RATE);
+        int firstSoundingFrame = (int) ((time - controlRate) * (double) WaveWriter.SAMPLE_RATE * timeScale);
+        int lastFrame = (int) ((time + controlRate) * (double) WaveWriter.SAMPLE_RATE * timeScale);
         int totSounding = lastFrame - firstSoundingFrame;
         int index = 1;
 
@@ -261,12 +285,12 @@ public class Demo {
                 double n = totSounding * rng.nextDouble();
                 int t = (int) (firstSoundingFrame + n);
 
-                double prob = probEnv.getValue(t / (double) fullSound.length);
+                double prob = probEnv.getValue(t / (double) outputLen);
 
                 if (rng.nextDouble() < prob) {
                     double actualFreq = peakFreq;
                     if (usePitchEnv && pitchEnv != null) {
-                        double ratio = pitchEnv.getValue(t / (double) fullSound.length);
+                        double ratio = pitchEnv.getValue(t / (double) outputLen);
                         actualFreq = peakFreq * ratio;
                     }
                     double[] tone = synth.note(actualFreq, peakAmp);
@@ -295,9 +319,27 @@ public class Demo {
     public static double[] renderGranularLayer(double[] fullSound, SynthParameters params,
                                                 long seedOffset, double layerDensity,
                                                 Consumer<Integer> progress) {
-        cancelled = false;
+        return renderGranularLayer(fullSound, params, seedOffset, layerDensity, progress, null);
+    }
 
-        int outLength = fullSound.length + WaveWriter.SAMPLE_RATE * 30;
+    /**
+     * Overload that accepts an external cancellation flag, avoiding the shared
+     * static Demo.cancelled field. If cancelFlag is null, falls back to Demo.cancelled.
+     */
+    public static double[] renderGranularLayer(double[] fullSound, SynthParameters params,
+                                                long seedOffset, double layerDensity,
+                                                Consumer<Integer> progress,
+                                                AtomicBoolean cancelFlag) {
+        // Use external cancel flag if provided, otherwise fall back to static field
+        final boolean useExternalCancel = (cancelFlag != null);
+        if (!useExternalCancel) cancelled = false;
+
+        int sourceLen = fullSound.length;
+        double avgPitchRatio = computeAvgPitchRatio(params.pitchEnv, params.usePitchEnv);
+        int outputLen = (int) (sourceLen / avgPitchRatio);
+        outputLen = Math.max(outputLen, WaveWriter.SAMPLE_RATE);
+
+        int outLength = outputLen + WaveWriter.SAMPLE_RATE * 30;
         double[] outSig = new double[outLength];
 
         Synth synth = new SimpleSynth(
@@ -315,8 +357,9 @@ public class Demo {
         Envelope pitchEnv = params.pitchEnv;
         boolean usePitchEnv = params.usePitchEnv;
 
-        double totalDuration = fullSound.length / (double) WaveWriter.SAMPLE_RATE;
+        double totalDuration = sourceLen / (double) WaveWriter.SAMPLE_RATE;
         final double[] sourceSound = fullSound;
+        final int finalOutputLen = outputLen;
 
         List<Double> windowTimes = new ArrayList<>();
         for (double time = controlRate; time < totalDuration - controlRate; time += controlRate) {
@@ -343,14 +386,15 @@ public class Demo {
                 futures.add(pool.submit(() -> {
                     double[] localBuf = new double[outLength];
                     for (int idx = batchFrom; idx < batchTo; idx++) {
-                        if (cancelled) return localBuf;
+                        if (useExternalCancel ? cancelFlag.get() : cancelled) return localBuf;
 
                         double time = windowTimes.get(idx);
                         Random rng = new Random(idx + seedOffset);
 
                         processWindow(time, sourceSound, synth, windowSize,
                                 controlRate, amplitudeThreshold, grainsPerPeak,
-                                probEnv, pitchEnv, usePitchEnv, localBuf, rng);
+                                probEnv, pitchEnv, usePitchEnv, localBuf, rng,
+                                finalOutputLen);
 
                         int done = completedWindows.incrementAndGet();
                         if (progress != null) {
@@ -363,7 +407,7 @@ public class Demo {
 
             for (Future<double[]> f : futures) {
                 double[] buf = f.get();
-                if (cancelled) return null;
+                if (useExternalCancel ? cancelFlag.get() : cancelled) return null;
                 for (int i = 0; i < outSig.length; i++) {
                     outSig[i] += buf[i];
                 }
@@ -374,10 +418,10 @@ public class Demo {
             pool.shutdownNow();
         }
 
-        if (cancelled) return null;
+        if (useExternalCancel ? cancelFlag.get() : cancelled) return null;
 
-        // Trim to source length and normalize — no source mix applied
-        outSig = Arrays.copyOf(outSig, fullSound.length);
+        // Trim to output length and normalize — no source mix applied
+        outSig = Arrays.copyOf(outSig, outputLen);
         Normalize.normalize(outSig);
 
         if (progress != null) progress.accept(100);
