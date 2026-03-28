@@ -290,28 +290,22 @@ public class Envelope {
 
     public double getValue(double time) {
         time /= duration;
-        double x1 = 0;
-        double x2 = 0;
-        double y1 = 0;
-        double y2 = 0;
-        for (int i = 0; i < times.length && times[i] < time; i++) {
-            x1 = times[i];
-            y1 = values[i];
-            if (i < times.length - 1) {
-                x2 = times[i + 1];
-                y2 = values[i + 1];
-            } else {
-                x2 = x1 + 1;
-                y2 = y1;
-            }
-        }
-        if (x1 == x2)
-            return y2;// values[0] ... maybe before it was a drawn env redundant X's indicated a
-                      // mistake or trival case
+        if (times == null || times.length == 0) return 0;
+        if (time <= times[0]) return values[0];
+        if (time >= times[times.length - 1]) return values[times.length - 1];
 
-        double m = (y1 - y2) / (x1 - x2);
-        double b = y1 - m * x1;
-        return m * time + b;
+        // Binary search for the segment containing this time
+        int idx = java.util.Arrays.binarySearch(times, time);
+        if (idx >= 0) return values[idx]; // exact match
 
+        int insertionPoint = -(idx + 1);
+        int i = Math.max(0, insertionPoint - 1);
+        if (i >= times.length - 1) return values[times.length - 1];
+
+        double x1 = times[i], x2 = times[i + 1];
+        double y1 = values[i], y2 = values[i + 1];
+        if (x1 == x2) return y2;
+        double frac = (time - x1) / (x2 - x1);
+        return y1 + frac * (y2 - y1);
     }
 }

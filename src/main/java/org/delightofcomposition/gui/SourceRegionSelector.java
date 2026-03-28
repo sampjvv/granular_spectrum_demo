@@ -1,5 +1,6 @@
 package org.delightofcomposition.gui;
 
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Dimension;
@@ -42,6 +43,7 @@ public class SourceRegionSelector extends JComponent {
         setPreferredSize(new Dimension(0, 80));
         setMinimumSize(new Dimension(0, 60));
         setOpaque(false);
+        setFocusable(true);
 
         MouseAdapter mouse = new MouseAdapter() {
             @Override
@@ -240,6 +242,13 @@ public class SourceRegionSelector extends JComponent {
         String outStr = "Output: " + formatDuration(outputSec);
         g2.setColor(Theme.FG_DIM);
         g2.drawString(outStr, w - fm.stringWidth(outStr) - LABEL_PAD, fm.getAscent() + 2);
+
+        // Focus ring
+        if (isFocusOwner()) {
+            g2.setColor(Theme.RING);
+            g2.setStroke(new BasicStroke(2f));
+            g2.drawRoundRect(1, 1, w - 3, h - 3, Theme.RADIUS, Theme.RADIUS);
+        }
 
         g2.dispose();
     }

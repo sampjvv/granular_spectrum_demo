@@ -1,11 +1,13 @@
 package org.delightofcomposition.gui;
 
-import java.awt.Color;
+import java.awt.BasicStroke;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
@@ -126,10 +128,12 @@ public class LabeledSlider extends JPanel {
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             setPreferredSize(new Dimension(200, SLIDER_AREA_H));
             setMaximumSize(new Dimension(Integer.MAX_VALUE, SLIDER_AREA_H));
+            setFocusable(true);
 
             addMouseListener(new MouseAdapter() {
                 @Override
                 public void mousePressed(MouseEvent e) {
+                    requestFocusInWindow();
                     dragging = true;
                     updateFromMouse(e.getX());
                 }
@@ -144,6 +148,17 @@ public class LabeledSlider extends JPanel {
                 @Override
                 public void mouseDragged(MouseEvent e) {
                     if (dragging) updateFromMouse(e.getX());
+                }
+            });
+
+            addKeyListener(new KeyAdapter() {
+                @Override
+                public void keyPressed(KeyEvent e) {
+                    if (e.getKeyCode() == KeyEvent.VK_LEFT || e.getKeyCode() == KeyEvent.VK_DOWN) {
+                        setValue(value - 1);
+                    } else if (e.getKeyCode() == KeyEvent.VK_RIGHT || e.getKeyCode() == KeyEvent.VK_UP) {
+                        setValue(value + 1);
+                    }
                 }
             });
         }
@@ -180,16 +195,23 @@ public class LabeledSlider extends JPanel {
             int thumbY = (h - THUMB_SIZE) / 2;
 
             // Shadow
-            g2.setColor(new Color(0, 0, 0, 40));
+            g2.setColor(Theme.SHADOW);
             g2.fillOval(thumbX + 1, thumbY + 1, THUMB_SIZE, THUMB_SIZE);
 
-            // White fill
-            g2.setColor(Color.WHITE);
+            // Thumb fill
+            g2.setColor(Theme.THUMB);
             g2.fillOval(thumbX, thumbY, THUMB_SIZE, THUMB_SIZE);
 
             // Accent border
             g2.setColor(Theme.ACCENT);
             g2.drawOval(thumbX, thumbY, THUMB_SIZE - 1, THUMB_SIZE - 1);
+
+            // Focus ring
+            if (isFocusOwner()) {
+                g2.setColor(Theme.RING);
+                g2.setStroke(new BasicStroke(2f));
+                g2.drawRoundRect(1, 1, w - 3, h - 3, h, h);
+            }
 
             g2.dispose();
         }

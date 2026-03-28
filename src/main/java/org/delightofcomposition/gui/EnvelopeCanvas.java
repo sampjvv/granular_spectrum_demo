@@ -103,6 +103,7 @@ public class EnvelopeCanvas extends JComponent {
 
         setOpaque(false);
         setPreferredSize(new Dimension(600, 200));
+        setFocusable(true);
 
         setupMouseListeners();
 
@@ -291,8 +292,8 @@ public class EnvelopeCanvas extends JComponent {
             boolean isHovered = (i == hoveredNodeIndex);
             int size = isHovered ? NODE_HOVER_SIZE : NODE_SIZE;
 
-            // White fill
-            g2.setColor(Color.WHITE);
+            // Thumb fill
+            g2.setColor(Theme.THUMB);
             g2.fillOval(sx - size / 2, sy - size / 2, size, size);
 
             // Border
@@ -322,6 +323,14 @@ public class EnvelopeCanvas extends JComponent {
             FontMetrics fm = g2.getFontMetrics();
             g2.drawString(leftLabel, 4, h - 4);
             g2.drawString(rightLabel, w - fm.stringWidth(rightLabel) - 4, h - 4);
+        }
+
+        // Focus ring
+        if (isFocusOwner()) {
+            g2.setClip(null); // reset clip from zoom
+            g2.setColor(Theme.RING);
+            g2.setStroke(new BasicStroke(2f));
+            g2.drawRoundRect(1, 1, w - 3, h - 3, Theme.RADIUS, Theme.RADIUS);
         }
 
         // Update times/values arrays
@@ -467,6 +476,7 @@ public class EnvelopeCanvas extends JComponent {
         addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
+                requestFocusInWindow();
                 // Right-click: start panning (don't add nodes)
                 if (e.getButton() == MouseEvent.BUTTON3) {
                     if (e.getClickCount() == 2) {
@@ -589,7 +599,7 @@ public class EnvelopeCanvas extends JComponent {
                 }
 
                 setCursor(hoveredNodeIndex >= 0
-                        ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                        ? Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR)
                         : Cursor.getDefaultCursor());
 
                 if (oldHovered != hoveredNodeIndex) {

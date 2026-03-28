@@ -44,7 +44,7 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
     public EnvelopeEditorPanel(SynthParameters params) {
         this.params = params;
         setLayout(new java.awt.GridBagLayout());
-        setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
 
         densityEnvelope = envelopeToEditable(params.probEnv, false, false);
         mixEnvelope = envelopeToEditable(params.mixEnv, false, false);
@@ -88,7 +88,7 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
         gbc.fill = java.awt.GridBagConstraints.BOTH;
         gbc.weightx = 1.0;
         gbc.weighty = 1.0;
-        gbc.insets = new java.awt.Insets(4, 4, 4, 4);
+        gbc.insets = new java.awt.Insets(6, 6, 6, 6);
 
         // Row 0: Density (left), Mix (right)
         gbc.gridx = 0; gbc.gridy = 0;
@@ -143,7 +143,7 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
             }
         };
         card.setOpaque(false);
-        card.setBorder(BorderFactory.createEmptyBorder(12, 14, 12, 14));
+        card.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
 
         // Header with title + buttons
         JPanel header = new JPanel(new BorderLayout());
@@ -178,7 +178,12 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
         JButton undoBtn = Theme.ghostButton("Undo");
         undoBtn.setFont(Theme.FONT_SMALL);
         undoBtn.setPreferredSize(new Dimension(60, 26));
-        undoBtn.addActionListener(e -> canvas.undo());
+        undoBtn.setEnabled(false);
+        undoBtn.addActionListener(e -> {
+            canvas.undo();
+            undoBtn.setEnabled(canvas.canUndo());
+        });
+        canvas.addChangeListener(e -> undoBtn.setEnabled(canvas.canUndo()));
 
         HelpManager help = HelpManager.getInstance();
         help.register(resetBtn, "Reset this envelope to its default shape.");

@@ -75,6 +75,10 @@ public class MainWindow extends JFrame {
     private SourceRegionSelector regionSelector;
     private float[] fullSourceWaveform; // stored for re-slicing on region change
     private JPanel toolbar;
+    private JPanel mainWithLibrary;
+    private JSplitPane wavSplit;
+    private JSplitPane rightSplit;
+    private JSplitPane liveSplit;
 
     // Live mode controls
     private LiveMidiController liveController;
@@ -97,7 +101,17 @@ public class MainWindow extends JFrame {
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         setSize(1200, 800);
         setLocationRelativeTo(null);
-        getContentPane().setBackground(Theme.BG);
+
+        // Solid themed background behind ALL content — avoids Windows L&F white bleed
+        JPanel bg = new JPanel(new java.awt.BorderLayout()) {
+            @Override
+            protected void paintComponent(java.awt.Graphics g) {
+                g.setColor(Theme.BG);
+                g.fillRect(0, 0, getWidth(), getHeight());
+            }
+        };
+        bg.setBackground(Theme.BG);
+        setContentPane(bg);
 
         liveController = new LiveMidiController();
 
@@ -205,8 +219,7 @@ public class MainWindow extends JFrame {
             item.addActionListener(e -> {
                 Theme.applyTheme(preset);
                 SwingUtilities.updateComponentTreeUI(this);
-                getContentPane().setBackground(Theme.BG);
-                toolbar.setBackground(Theme.BG_CARD);
+                refreshBackgrounds();
                 repaint();
                 ThemePreferences.save(preset);
             });
@@ -229,6 +242,32 @@ public class MainWindow extends JFrame {
         menuBar.add(helpMenu);
 
         setJMenuBar(menuBar);
+    }
+
+    /** Re-apply themed backgrounds after a theme switch. */
+    private void refreshBackgrounds() {
+        getContentPane().setBackground(Theme.BG);
+        toolbar.setBackground(Theme.BG_CARD);
+        // Re-clear split pane internals that Windows L&F may recreate on updateUI
+        clearSplitPaneOpacity(wavSplit);
+        clearSplitPaneOpacity(rightSplit);
+        clearSplitPaneOpacity(liveSplit);
+    }
+
+    /**
+     * Make a JSplitPane and ALL its internal components (divider, wrapper panels)
+     * non-opaque so the root background shows through. Windows L&F creates opaque
+     * internal containers that ignore UIManager SplitPane.background.
+     */
+    private static void clearSplitPaneOpacity(JSplitPane sp) {
+        if (sp == null) return;
+        sp.setOpaque(false);
+        sp.setBorder(BorderFactory.createEmptyBorder());
+        for (java.awt.Component c : sp.getComponents()) {
+            if (c instanceof JComponent) {
+                ((JComponent) c).setOpaque(false);
+            }
+        }
     }
 
     private void buildToolbar() {
@@ -364,6 +403,7 @@ public class MainWindow extends JFrame {
     private void buildMainContent() {
         contentCardLayout = new CardLayout();
         contentCards = new JPanel(contentCardLayout);
+        contentCards.setOpaque(false);
 
         // ── WAV content (existing layout) ──
         parameterPanel = new ParameterPanel(params);
@@ -401,18 +441,22 @@ public class MainWindow extends JFrame {
         envelopeWrapper.add(regionSelector, BorderLayout.NORTH);
         envelopeWrapper.add(envelopeScroll, BorderLayout.CENTER);
 
-        envelopeScroll.setMinimumSize(new Dimension(0, 200));
-        waveformDisplay.setMinimumSize(new Dimension(0, 150));
+        envelopeScroll.setMinimumSize(new Dimension(0, 280));
+        waveformDisplay.setPreferredSize(new Dimension(0, 280));
+        waveformDisplay.setMinimumSize(new Dimension(0, 280));
+        waveformDisplay.setMaximumSize(new Dimension(Integer.MAX_VALUE, 280));
 
-        JSplitPane rightSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
+        rightSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
                 envelopeWrapper, waveformDisplay);
-        rightSplit.setResizeWeight(0.6);
-        rightSplit.setBorder(BorderFactory.createEmptyBorder());
+        rightSplit.setResizeWeight(1.0);
+        clearSplitPaneOpacity(rightSplit);
+        // Defer divider location — pixel values are ignored before layout
+        SwingUtilities.invokeLater(() -> rightSplit.setDividerLocation(0.7));
 
-        JSplitPane wavSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftScroll, rightSplit);
+        wavSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftScroll, rightSplit);
         wavSplit.setDividerLocation(340);
         wavSplit.setResizeWeight(0.0);
-        wavSplit.setBorder(BorderFactory.createEmptyBorder());
+        clearSplitPaneOpacity(wavSplit);
 
         contentCards.add(wavSplit, WAV_MODE);
 
@@ -433,11 +477,11 @@ public class MainWindow extends JFrame {
         liveRightScroll.getViewport().setBackground(Theme.BG);
         Theme.styleScrollPane(liveRightScroll);
 
-        JSplitPane liveSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
+        liveSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
                 liveLeftScroll, liveRightScroll);
         liveSplit.setDividerLocation(340);
         liveSplit.setResizeWeight(0.0);
-        liveSplit.setBorder(BorderFactory.createEmptyBorder());
+        clearSplitPaneOpacity(liveSplit);
 
         contentCards.add(liveSplit, LIVE_MODE);
 
@@ -463,7 +507,8 @@ public class MainWindow extends JFrame {
         });
         libraryPanel.setVisible(false);
 
-        JPanel mainWithLibrary = new JPanel(new BorderLayout());
+        mainWithLibrary = new JPanel(new BorderLayout());
+        mainWithLibrary.setOpaque(false);
         mainWithLibrary.add(contentCards, BorderLayout.CENTER);
         mainWithLibrary.add(libraryPanel, BorderLayout.EAST);
 
@@ -511,6 +556,7 @@ public class MainWindow extends JFrame {
         }
 
         liveStartBtn.setEnabled(false);
+        liveStopBtn.setEnabled(true);
         midiStatusLabel.setText("Preparing layers...");
         liveProgressBar.setValue(0);
         liveProgressBar.setVisible(true);

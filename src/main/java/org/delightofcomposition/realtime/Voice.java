@@ -4,29 +4,44 @@ import org.delightofcomposition.envelopes.Envelope;
 import org.delightofcomposition.sound.WaveWriter;
 
 /**
- * One MIDI voice — plays back pre-rendered granular layers + source sample
- * with pitch shifting, ADSR envelope, dramatic envelope, and stereo panning.
+ * One MIDI voice — spawns and renders bell grains in real-time from a
+ * pre-computed grain schedule, with truly continuous density control,
+ * ADSR envelope, dramatic envelope, and stereo panning.
  */
 public class Voice {
-    private static final int NUM_LAYERS = 5;
+
+    private static final int MAX_GRAINS = 2048;
 
     private int midiNote;
     private double velocity;
-    private double playbackRate; // midiFreq / sourceFundamental
     private boolean active;
 
-    // Playback position (fractional sample index into the pre-rendered buffers)
-    private double position;
+    // Grain synthesis
+    private GrainSchedule schedule;
+    private final GrainPool grainPool = new GrainPool(MAX_GRAINS);
+    private double pitchRatio;       // midiFreq / sourceFundamental
+    private int nextEventIndex;      // pointer into schedule events
+    private double voiceTimeSec;     // elapsed time in source timeline
 
-    // References to shared pre-rendered buffers
-    private double[][] granularLayers; // [5][samples]
-    private double[] sourceBuffer;
-    private int bufferLength; // shortest buffer length
+    // Source playback (for mix control)
+    private double sourcePosition;   // fractional sample index into source
+    private double sourceRate;       // playback rate for source at MIDI pitch
+
+    // Grain lifetime cap: 5 seconds preserves bell attack + reverb tail
+    // while preventing grains pitched down from hogging slots for 60+ seconds
+    private static final double MAX_GRAIN_DURATION_SEC = 5.0;
+    private static final int MAX_GRAIN_SAMPLES = (int) (MAX_GRAIN_DURATION_SEC * WaveWriter.SAMPLE_RATE);
+
+    // Density rescaling: UI 100% maps to 10% of raw event probability
+    private static final double DENSITY_SCALE = 0.1;
 
     // Dramatic envelope parameters
     private double dramaticFactor;
     private Envelope dramaticEnvShape;
-    private double dramaticDenom; // precomputed: (e^factor - 1)
+    private double dramaticDenom;
+
+    // Pre-allocated per-block grain render buffer (mono, summed before mix)
+    private final double[] grainBuffer = new double[1024];
 
     // ADSR envelope
     private static final int ATTACK_SAMPLES = (int) (0.050 * WaveWriter.SAMPLE_RATE);
@@ -39,32 +54,54 @@ public class Voice {
     private int envSamplesInStage;
     private double envLevel;
 
+    // Track total samples for dramatic envelope position
+    private double sampleCount;
+
     public Voice() {
         this.active = false;
     }
 
-    public void setBuffers(double[][] granularLayers, double[] sourceBuffer,
-                           double dramaticFactor, Envelope dramaticEnvShape) {
-        this.granularLayers = granularLayers;
-        this.sourceBuffer = sourceBuffer;
+    /**
+     * Set the grain schedule (called once during setup, shared across voices).
+     */
+    public void setGrainSchedule(GrainSchedule schedule,
+                                  double dramaticFactor, Envelope dramaticEnvShape) {
+        this.schedule = schedule;
         this.dramaticFactor = dramaticFactor;
         this.dramaticEnvShape = dramaticEnvShape;
         this.dramaticDenom = (dramaticFactor > 0.001)
-                ? (Math.pow(Math.E, dramaticFactor) - 1) : 1.0;
-        // Use shortest buffer to avoid out-of-bounds
-        int min = sourceBuffer.length;
-        for (double[] layer : granularLayers) {
-            min = Math.min(min, layer.length);
-        }
-        this.bufferLength = min;
+                ? (Math.exp(dramaticFactor) - 1) : 1.0;
     }
 
-    public void noteOn(int note, int velocity, double sourceFundamental) {
+    // Legacy compatibility — not used with grain schedule path
+    public void setOctaveBuffers(double[][][] octaveLayers, double[][] octaveSources,
+                                  int[] octaveBufferLengths, double[] octaveRootFreqs,
+                                  double dramaticFactor, Envelope dramaticEnvShape) {
+        this.dramaticFactor = dramaticFactor;
+        this.dramaticEnvShape = dramaticEnvShape;
+        this.dramaticDenom = (dramaticFactor > 0.001)
+                ? (Math.exp(dramaticFactor) - 1) : 1.0;
+    }
+
+    public void noteOn(int note, int velocity) {
+        if (schedule == null) return;
+
         this.midiNote = note;
         this.velocity = velocity / 127.0;
+        this.sampleCount = 0;
+        this.voiceTimeSec = 0;
+        this.nextEventIndex = 0;
+
         double midiFreq = 440.0 * Math.pow(2, (note - 69) / 12.0);
-        this.playbackRate = midiFreq / sourceFundamental;
-        this.position = 0;
+        this.pitchRatio = midiFreq / schedule.getSourceFundamental();
+
+        // Source playback for mix control
+        this.sourcePosition = 0;
+        this.sourceRate = pitchRatio;
+
+        // Clear any lingering grains from previous note
+        grainPool.clear();
+
         this.envStage = EnvStage.ATTACK;
         this.envSamplesInStage = 0;
         this.envLevel = 0;
@@ -79,48 +116,85 @@ public class Voice {
     }
 
     /**
-     * Render this voice into stereo output buffers, blending granular layers
-     * and source based on mix, density, and pan controls.
+     * Render this voice into stereo output buffers.
      */
     public void render(double[] outL, double[] outR, int length,
                        double mix, double density, double pan) {
-        if (!active || granularLayers == null || sourceBuffer == null) return;
+        if (!active || schedule == null) return;
+
+        double sourceDuration = schedule.getSourceDurationSec();
+
+        // ── 0. Wrap schedule when we've passed the source duration ──
+        // Must happen BEFORE computing blockEndTimeSec to avoid firing
+        // all events at once with a stale large time value
+        if (nextEventIndex >= schedule.getEvents().length && voiceTimeSec >= sourceDuration) {
+            voiceTimeSec %= sourceDuration;
+            nextEventIndex = schedule.findFirstEventAt(voiceTimeSec);
+        }
+
+        double blockDurationSec = length / (double) WaveWriter.SAMPLE_RATE;
+        double blockEndTimeSec = voiceTimeSec + blockDurationSec;
+
+        // ── 1. Spawn grains for events within this block's time range ──
+        double effectiveDensity = density * DENSITY_SCALE;
+        GrainSchedule.GrainEvent[] events = schedule.getEvents();
+        while (nextEventIndex < events.length
+                && events[nextEventIndex].time <= blockEndTimeSec) {
+            GrainSchedule.GrainEvent event = events[nextEventIndex];
+            nextEventIndex++;
+
+            // Density gating: continuous probability threshold (rescaled)
+            if (event.threshold >= effectiveDensity) continue;
+
+            // Compute grain playback rate:
+            // peakFreq × (midiFreq / sourceFundamental) / bellOrigFreq
+            double grainRate = event.frequency * pitchRatio / schedule.getBellOrigFreq();
+
+            grainPool.spawn(grainRate, event.amplitude, MAX_GRAIN_SAMPLES,
+                    schedule.getBellDry(), schedule.getBellWet(),
+                    schedule.isUseReverb(), schedule.getReverbMix());
+        }
+
+        // ── 2. Render all active grains into mono buffer ──
+        for (int i = 0; i < length; i++) grainBuffer[i] = 0;
+        grainPool.renderAll(grainBuffer, length);
+
+        // ── 3. Pre-compute dramatic envelope at block boundaries ──
+        boolean useDramatic = dramaticFactor > 0.001 && dramaticEnvShape != null;
+        double dramLinearStart = 0, dramLinearDelta = 0;
+        double totalSamplesForSource = sourceDuration * WaveWriter.SAMPLE_RATE;
+        if (useDramatic) {
+            double posStart = Math.min(1.0, sampleCount / totalSamplesForSource);
+            double posEnd = Math.min(1.0, (sampleCount + length) / totalSamplesForSource);
+            dramLinearStart = dramaticEnvShape.getValue(posStart);
+            double dramLinearEnd = dramaticEnvShape.getValue(posEnd);
+            dramLinearDelta = (dramLinearEnd - dramLinearStart) / length;
+        }
+
+        // ── 4. Mix, envelope, pan — per sample ──
+        double[] sourceBuf = schedule.getSourceSample();
 
         for (int i = 0; i < length; i++) {
-            // Check if we've reached the end of the buffers
-            int srcIndex = (int) position;
-            if (srcIndex + 1 >= bufferLength) {
-                if (envStage == EnvStage.RELEASE || envStage == EnvStage.OFF) {
-                    active = false;
+            double granularVal = grainBuffer[i];
+
+            // Read source for mix control
+            double sourceVal = 0;
+            if (mix > 0) {
+                int srcIdx = (int) sourcePosition;
+                if (srcIdx + 1 < sourceBuf.length) {
+                    double frac = sourcePosition - srcIdx;
+                    sourceVal = sourceBuf[srcIdx] * (1 - frac) + sourceBuf[srcIdx + 1] * frac;
                 }
-                return;
+                sourcePosition += sourceRate;
             }
-
-            double fract = position - srcIndex;
-
-            // Read from each granular layer with linear interpolation
-            double granularSum = 0;
-            for (int layer = 0; layer < NUM_LAYERS; layer++) {
-                double[] buf = granularLayers[layer];
-                double sample = buf[srcIndex] * (1 - fract) + buf[srcIndex + 1] * fract;
-
-                // Scale by density: each layer gets 1/5 of the slider range to fade in
-                double layerGain = Math.max(0, Math.min(1, (density - layer / (double) NUM_LAYERS) * NUM_LAYERS));
-                granularSum += sample * layerGain;
-            }
-
-            // Read source with linear interpolation
-            double sourceVal = sourceBuffer[srcIndex] * (1 - fract)
-                             + sourceBuffer[srcIndex + 1] * fract;
 
             // Blend granular and source
-            double blended = (1.0 - mix) * granularSum + mix * sourceVal;
+            double blended = (1.0 - mix) * granularVal + mix * sourceVal;
 
-            // Apply dramatic envelope based on playback position
-            if (dramaticFactor > 0.001 && dramaticEnvShape != null) {
-                double envPos = position / (double) bufferLength;
-                double linear = dramaticEnvShape.getValue(Math.min(1.0, envPos));
-                double expFunc = (Math.pow(Math.E, dramaticFactor * linear) - 1) / dramaticDenom;
+            // Apply dramatic envelope
+            if (useDramatic) {
+                double linear = dramLinearStart + dramLinearDelta * i;
+                double expFunc = (Math.exp(dramaticFactor * linear) - 1) / dramaticDenom;
                 blended *= expFunc;
             }
 
@@ -131,8 +205,7 @@ public class Voice {
             outL[i] += blended * (1.0 - pan);
             outR[i] += blended * pan;
 
-            // Advance playback position
-            position += playbackRate;
+            sampleCount++;
 
             // Advance envelope
             advanceEnvelope();
@@ -141,6 +214,8 @@ public class Voice {
                 return;
             }
         }
+
+        voiceTimeSec = blockEndTimeSec;
     }
 
     private void advanceEnvelope() {

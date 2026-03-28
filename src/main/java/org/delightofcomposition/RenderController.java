@@ -79,6 +79,7 @@ public class RenderController {
                 if (!chunks.isEmpty()) {
                     int latest = chunks.get(chunks.size() - 1);
                     progressBar.setValue(latest);
+                    progressBar.setString("Rendering " + latest + "%");
                 }
             }
 

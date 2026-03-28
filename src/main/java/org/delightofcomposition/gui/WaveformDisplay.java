@@ -16,6 +16,8 @@ import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.SwingWorker;
 
+import org.delightofcomposition.sound.WaveWriter;
+
 /**
  * Post-render visualization with waveform and spectrogram modes.
  * Uses SegmentedControl tabs to switch between views.
@@ -53,7 +55,7 @@ public class WaveformDisplay extends JPanel {
             }
         };
         card.setOpaque(false);
-        card.setBorder(BorderFactory.createEmptyBorder(12, 14, 12, 14));
+        card.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
 
         // Header with tabs
         JPanel header = new JPanel(new BorderLayout());
@@ -110,8 +112,8 @@ public class WaveformDisplay extends JPanel {
 
                 int numFrames = Math.max(1, (mono.length - STFT_WINDOW) / STFT_HOP + 1);
                 int freqBins = STFT_WINDOW / 2;
-                // Limit to ~10kHz (assuming 44100 sample rate)
-                int maxBin = Math.min(freqBins, (int) (10000.0 / 44100 * STFT_WINDOW));
+                // Limit to ~10kHz
+                int maxBin = Math.min(freqBins, (int) (10000.0 / WaveWriter.SAMPLE_RATE * STFT_WINDOW));
 
                 double[][] magnitudes = new double[numFrames][maxBin];
                 double globalMax = 0;
@@ -192,7 +194,7 @@ public class WaveformDisplay extends JPanel {
     private class WaveformCanvas extends JComponent {
 
         WaveformCanvas() {
-            setPreferredSize(new Dimension(600, 120));
+            setPreferredSize(new Dimension(600, 160));
         }
 
         @Override

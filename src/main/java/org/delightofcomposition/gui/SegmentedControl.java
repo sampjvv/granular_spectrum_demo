@@ -1,12 +1,14 @@
 package org.delightofcomposition.gui;
 
-import java.awt.Color;
+import java.awt.BasicStroke;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
@@ -42,15 +44,28 @@ public class SegmentedControl extends JComponent {
         setOpaque(false);
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         setFont(Theme.FONT_SMALL);
+        setFocusable(true);
 
         addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
+                requestFocusInWindow();
                 int segW = (getWidth() - INSET * 2) / labels.length;
                 int clickedIndex = (e.getX() - INSET) / segW;
                 clickedIndex = Math.max(0, Math.min(labels.length - 1, clickedIndex));
                 if (clickedIndex != selectedIndex) {
                     setSelectedIndexAnimated(clickedIndex);
+                }
+            }
+        });
+
+        addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_LEFT && selectedIndex > 0) {
+                    setSelectedIndexAnimated(selectedIndex - 1);
+                } else if (e.getKeyCode() == KeyEvent.VK_RIGHT && selectedIndex < labels.length - 1) {
+                    setSelectedIndexAnimated(selectedIndex + 1);
                 }
             }
         });
@@ -89,10 +104,17 @@ public class SegmentedControl extends JComponent {
         for (int i = 0; i < labels.length; i++) {
             int segX = INSET + i * segW;
             boolean active = i == selectedIndex;
-            g2.setColor(active ? Color.WHITE : Theme.FG_MUTED);
+            g2.setColor(active ? Theme.THUMB : Theme.FG_MUTED);
             int tx = segX + (segW - fm.stringWidth(labels[i])) / 2;
             int ty = (h + fm.getAscent() - fm.getDescent()) / 2;
             g2.drawString(labels[i], tx, ty);
+        }
+
+        // Focus ring
+        if (isFocusOwner()) {
+            g2.setColor(Theme.RING);
+            g2.setStroke(new BasicStroke(2f));
+            g2.drawRoundRect(1, 1, w - 3, h - 3, radius, radius);
         }
 
         g2.dispose();

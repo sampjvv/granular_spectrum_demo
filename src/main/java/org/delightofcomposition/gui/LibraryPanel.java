@@ -138,7 +138,6 @@ public class LibraryPanel extends JPanel {
         };
         card.setOpaque(false);
         card.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
-        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 80));
 
         // Name + date
         JPanel info = new JPanel();
@@ -149,6 +148,7 @@ public class LibraryPanel extends JPanel {
         nameLabel.setFont(Theme.FONT_BASE);
         nameLabel.setForeground(Theme.FG);
         nameLabel.setAlignmentX(0);
+        nameLabel.setToolTipText(entry.displayName);
         info.add(nameLabel);
 
         JLabel dateLabel = new JLabel(DATE_FMT.format(new Date(entry.dateMillis)));
@@ -159,14 +159,18 @@ public class LibraryPanel extends JPanel {
 
         card.add(info, BorderLayout.CENTER);
 
-        // Buttons
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        // Buttons — split into two rows to fit within sidebar width
+        JPanel buttons = new JPanel();
+        buttons.setLayout(new BoxLayout(buttons, BoxLayout.Y_AXIS));
         buttons.setOpaque(false);
+
+        JPanel topRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        topRow.setOpaque(false);
 
         if (isRender && entry.wavFile != null) {
             JButton playBtn = Theme.ghostButton("Play");
             playBtn.setFont(Theme.FONT_SMALL);
-            playBtn.setPreferredSize(new Dimension(50, 22));
+            playBtn.setPreferredSize(new Dimension(46, 22));
             playBtn.addActionListener(e -> {
                 if (libraryPlayer.isPlaying() && currentPlayBtn == playBtn) {
                     libraryPlayer.stop();
@@ -186,15 +190,15 @@ public class LibraryPanel extends JPanel {
                     }
                 }
             });
-            buttons.add(playBtn);
+            topRow.add(playBtn);
         }
 
         if (entry.propertiesFile != null && entry.propertiesFile.exists()) {
             JButton loadBtn = Theme.ghostButton("Load");
             loadBtn.setFont(Theme.FONT_SMALL);
-            loadBtn.setPreferredSize(new Dimension(50, 22));
+            loadBtn.setPreferredSize(new Dimension(46, 22));
             loadBtn.addActionListener(e -> callback.onLoadPreset(entry.propertiesFile));
-            buttons.add(loadBtn);
+            topRow.add(loadBtn);
         }
 
         JButton updateBtn = Theme.ghostButton("Update");
@@ -210,7 +214,12 @@ public class LibraryPanel extends JPanel {
                 refresh();
             }
         });
-        buttons.add(updateBtn);
+        topRow.add(updateBtn);
+
+        buttons.add(topRow);
+
+        JPanel bottomRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        bottomRow.setOpaque(false);
 
         JButton renameBtn = Theme.ghostButton("Rename");
         renameBtn.setFont(Theme.FONT_SMALL);
@@ -222,7 +231,7 @@ public class LibraryPanel extends JPanel {
                 refresh();
             }
         });
-        buttons.add(renameBtn);
+        bottomRow.add(renameBtn);
 
         JButton delBtn = Theme.ghostButton("Del");
         delBtn.setFont(Theme.FONT_SMALL);
@@ -241,7 +250,9 @@ public class LibraryPanel extends JPanel {
                 refresh();
             }
         });
-        buttons.add(delBtn);
+        bottomRow.add(delBtn);
+
+        buttons.add(bottomRow);
 
         card.add(buttons, BorderLayout.SOUTH);
         return card;

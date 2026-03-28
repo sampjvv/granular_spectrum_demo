@@ -1,19 +1,10 @@
 package org.delightofcomposition.realtime;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.function.Consumer;
 
 import javax.sound.midi.MidiDevice;
 import javax.sound.midi.Transmitter;
 
-import org.delightofcomposition.Demo;
 import org.delightofcomposition.SynthParameters;
 import org.delightofcomposition.analysis.SpectralAnalysis;
 import org.delightofcomposition.midi.MidiInputHandler;
@@ -23,9 +14,6 @@ import org.delightofcomposition.sound.ReadSound;
 public class LiveMidiController {
 
     private static final int MAX_VOICES = 16;
-    private static final int NUM_LAYERS = 5;
-    // Per-layer grain density: sparse → dense, sums to 1.0
-    private static final double[] LAYER_DENSITIES = {0.05, 0.15, 0.20, 0.30, 0.30};
 
     private AudioEngine engine;
     private MidiDevice midiDevice;
@@ -36,15 +24,14 @@ public class LiveMidiController {
 
     private volatile boolean running;
     private volatile boolean starting;
-    private final AtomicBoolean layerCancelled = new AtomicBoolean(false);
 
     public void start(SynthParameters params, Consumer<Integer> progress) {
         if (running || starting) return;
         starting = true;
-        layerCancelled.set(false);
 
         try {
-            // Load and normalize source sample, applying region selection
+            // 1. Load and normalize source sample, applying region selection
+            if (progress != null) progress.accept(5);
             double[] rawSource = ReadSound.readSoundDoubles(params.sourceFile.getPath());
             int regionStart = (int) (params.sourceStartFraction * rawSource.length);
             int regionEnd = (int) (params.sourceEndFraction * rawSource.length);
@@ -54,103 +41,54 @@ public class LiveMidiController {
             final double[] sourceSample = java.util.Arrays.copyOfRange(rawSource, regionStart, regionEnd);
             Normalize.normalize(sourceSample);
 
-            // Detect fundamental frequency via spectral analysis
+            // 2. Run spectral analysis (FFT → peaks per window)
+            if (progress != null) progress.accept(15);
             int windowSize = params.getWindowSize();
             double controlRate = params.controlRate;
             analysis = SpectralAnalysis.analyze(sourceSample, windowSize, controlRate);
 
-            // Pre-render 5 granular layers in parallel at varying densities
-            double[][] granularLayers = new double[NUM_LAYERS][];
-            AtomicIntegerArray layerProgress = new AtomicIntegerArray(NUM_LAYERS);
-            ExecutorService layerPool = Executors.newFixedThreadPool(NUM_LAYERS);
-            List<Future<double[]>> futures = new ArrayList<>();
+            // 3. Build grain schedule from spectral analysis + load bell sample
+            if (progress != null) progress.accept(50);
+            GrainSchedule schedule = GrainSchedule.build(
+                    analysis, sourceSample,
+                    params.grainFile.getPath(),
+                    params.grainReferenceFreq,
+                    params.impulseResponseFile.getPath(),
+                    params.useReverb,
+                    params.synthReverbMix,
+                    params.grainsPerPeak);
 
-            for (int i = 0; i < NUM_LAYERS; i++) {
-                final int layerIdx = i;
-                long seedOffset = i * 1000L;
-                double density = LAYER_DENSITIES[i];
-                futures.add(layerPool.submit(() -> {
-                    Consumer<Integer> layerCb = pct -> {
-                        layerProgress.set(layerIdx, pct);
-                        if (progress != null) {
-                            int sum = 0;
-                            for (int j = 0; j < NUM_LAYERS; j++) sum += layerProgress.get(j);
-                            progress.accept(sum / NUM_LAYERS);
-                        }
-                    };
-                    return Demo.renderGranularLayer(sourceSample, params, seedOffset, density, layerCb, layerCancelled);
-                }));
-            }
+            if (progress != null) progress.accept(90);
 
-            try {
-                for (int i = 0; i < NUM_LAYERS; i++) {
-                    granularLayers[i] = futures.get(i).get();
-                    if (granularLayers[i] == null) {
-                        layerPool.shutdownNow();
-                        return;
-                    }
-                }
-            } catch (InterruptedException | ExecutionException e) {
-                layerPool.shutdownNow();
-                throw new RuntimeException("Layer rendering failed", e);
-            }
-            layerPool.shutdown();
-            if (progress != null) progress.accept(100);
-
-            // Diagnostic: verify layers have actual content
-            for (int i = 0; i < NUM_LAYERS; i++) {
-                double peak = 0;
-                for (double v : granularLayers[i]) peak = Math.max(peak, Math.abs(v));
-                System.out.println("[LiveMidi] Layer " + i + ": len=" + granularLayers[i].length
-                        + " peak=" + String.format("%.6f", peak)
-                        + " density=" + LAYER_DENSITIES[i]);
-            }
-            {
-                double srcPeak = 0;
-                for (double v : sourceSample) srcPeak = Math.max(srcPeak, Math.abs(v));
-                System.out.println("[LiveMidi] Source sample: len=" + sourceSample.length
-                        + " peak=" + String.format("%.6f", srcPeak));
-                // Check if layer 0 and source are identical (should NOT be)
-                boolean identical = (granularLayers[0].length == sourceSample.length);
-                if (identical) {
-                    for (int i = 0; i < Math.min(1000, sourceSample.length); i++) {
-                        if (Math.abs(granularLayers[0][i] - sourceSample[i]) > 1e-10) {
-                            identical = false;
-                            break;
-                        }
-                    }
-                }
-                System.out.println("[LiveMidi] Layer0 == Source? " + identical);
-            }
-
-            // Create engine components
+            // 4. Create engine components
             controlState = new ControlState();
             voices = new Voice[MAX_VOICES];
             for (int i = 0; i < MAX_VOICES; i++) {
                 voices[i] = new Voice();
-                voices[i].setBuffers(granularLayers, sourceSample,
+                voices[i].setGrainSchedule(schedule,
                         params.dramaticFactor, params.dramaticEnvShape);
             }
 
-            // Set up MIDI input
+            // 5. Set up MIDI input
             midiDevice = MidiInputHandler.findAndOpenDevice();
             if (midiDevice != null) {
                 try {
                     Transmitter transmitter = midiDevice.getTransmitter();
-                    MidiInputHandler handler = new MidiInputHandler(voices, controlState,
-                            analysis.getSourceFundamentalHz());
+                    MidiInputHandler handler = new MidiInputHandler(voices, controlState);
                     transmitter.setReceiver(handler);
                 } catch (Exception e) {
                     System.err.println("Failed to connect MIDI: " + e.getMessage());
                 }
             }
 
-            // Start audio engine on daemon thread
+            // 6. Start audio engine on high-priority thread
             engine = new AudioEngine(voices, controlState);
             audioThread = new Thread(engine, "LiveAudioEngine");
             audioThread.setDaemon(true);
+            audioThread.setPriority(Thread.MAX_PRIORITY);
             audioThread.start();
 
+            if (progress != null) progress.accept(100);
             running = true;
         } finally {
             starting = false;
@@ -158,14 +96,11 @@ public class LiveMidiController {
     }
 
     public void cancel() {
-        layerCancelled.set(true);
+        // No long-running render to cancel — startup is fast
     }
 
     public void stop() {
-        if (starting) {
-            layerCancelled.set(true);
-            return;
-        }
+        if (starting) return;
         if (!running) return;
         running = false;
 

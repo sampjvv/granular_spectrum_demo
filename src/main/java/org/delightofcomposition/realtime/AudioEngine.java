@@ -12,7 +12,7 @@ import org.delightofcomposition.sound.WaveWriter;
  * PCM stream with real-time mix, density, and pan control.
  */
 public class AudioEngine implements Runnable {
-    private static final int BUFFER_SIZE = 512; // samples per channel per block
+    private static final int BUFFER_SIZE = 1024; // samples per channel per block
 
     private final Voice[] voices;
     private final ControlState controls;

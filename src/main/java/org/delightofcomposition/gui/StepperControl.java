@@ -101,9 +101,9 @@ public class StepperControl extends JPanel {
         StepperButton plus = new StepperButton(true);
 
         add(minus);
-        add(Box.createHorizontalStrut(4));
+        add(Box.createHorizontalStrut(6));
         add(valueField);
-        add(Box.createHorizontalStrut(4));
+        add(Box.createHorizontalStrut(6));
         add(plus);
 
         valueField.setMaximumSize(new Dimension(Integer.MAX_VALUE, BTN_SIZE));

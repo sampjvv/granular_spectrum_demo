@@ -63,7 +63,7 @@ public class SampleDropPanel extends JPanel {
             }
         };
         inner.setOpaque(false);
-        inner.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 6));
+        inner.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
 
         JPanel labels = new JPanel(new BorderLayout());
         labels.setOpaque(false);

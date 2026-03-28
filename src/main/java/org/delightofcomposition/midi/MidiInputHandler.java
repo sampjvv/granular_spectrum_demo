@@ -14,12 +14,10 @@ import org.delightofcomposition.realtime.Voice;
 public class MidiInputHandler implements Receiver {
     private final Voice[] voices;
     private final ControlState controls;
-    private final double sourceFundamental;
 
-    public MidiInputHandler(Voice[] voices, ControlState controls, double sourceFundamental) {
+    public MidiInputHandler(Voice[] voices, ControlState controls) {
         this.voices = voices;
         this.controls = controls;
-        this.sourceFundamental = sourceFundamental;
     }
 
     @Override
@@ -56,7 +54,7 @@ public class MidiInputHandler implements Receiver {
         // Find a free voice
         for (Voice voice : voices) {
             if (!voice.isActive()) {
-                voice.noteOn(note, velocity, sourceFundamental);
+                voice.noteOn(note, velocity);
                 System.out.println("Note ON: " + note + " vel=" + velocity);
                 return;
             }

@@ -1,5 +1,6 @@
 package org.delightofcomposition.gui;
 
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Font;
@@ -74,6 +75,12 @@ public class Theme {
     public static Color AMBER         = new Color(245, 158, 11);
     public static Color AMBER_FILL    = new Color(245, 158, 11, 30);
 
+    // ── Derived tokens (not in ThemePreset — computed from palette) ──
+    /** Thumb/node fill color for sliders, toggles, and envelope nodes. */
+    public static Color THUMB  = ZINC_50;
+    /** Subtle drop shadow for thumbs and elevated elements. */
+    public static Color SHADOW = new Color(0, 0, 0, 40);
+
     // ── Typography ──
     public static Font FONT_BASE    = new Font("Segoe UI", Font.PLAIN, 13);
     public static Font FONT_SMALL   = new Font("Segoe UI", Font.PLAIN, 11);
@@ -144,6 +151,13 @@ public class Theme {
         DESTRUCTIVE = preset.destructive;
         SUCCESS = preset.success; SUCCESS_FILL = preset.successFill;
         AMBER = preset.amber; AMBER_FILL = preset.amberFill;
+
+        // Derived tokens
+        THUMB = preset.zinc50;
+        // Shadow opacity adapts: darker BG = lighter shadow, lighter BG = darker shadow
+        int bgLuma = (preset.bg.getRed() + preset.bg.getGreen() + preset.bg.getBlue()) / 3;
+        int shadowAlpha = bgLuma < 40 ? 40 : 60;
+        SHADOW = new Color(0, 0, 0, shadowAlpha);
 
         // Fonts (null = use defaults)
         FONT_BASE    = preset.fontBase    != null ? preset.fontBase    : DEF_FONT_BASE;
@@ -428,6 +442,11 @@ public class Theme {
                 int tx = (getWidth() - fm.stringWidth(getText())) / 2;
                 int ty = (getHeight() + fm.getAscent() - fm.getDescent()) / 2;
                 g2.drawString(getText(), tx, ty);
+                if (isFocusOwner()) {
+                    g2.setColor(RING);
+                    g2.setStroke(new BasicStroke(2f));
+                    g2.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, RADIUS, RADIUS);
+                }
                 g2.dispose();
             }
         };
@@ -463,6 +482,11 @@ public class Theme {
                 int tx = (getWidth() - fm.stringWidth(getText())) / 2;
                 int ty = (getHeight() + fm.getAscent() - fm.getDescent()) / 2;
                 g2.drawString(getText(), tx, ty);
+                if (isFocusOwner()) {
+                    g2.setColor(RING);
+                    g2.setStroke(new BasicStroke(2f));
+                    g2.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, RADIUS, RADIUS);
+                }
                 g2.dispose();
             }
         };
@@ -495,6 +519,11 @@ public class Theme {
                 int tx = (getWidth() - fm.stringWidth(getText())) / 2;
                 int ty = (getHeight() + fm.getAscent() - fm.getDescent()) / 2;
                 g2.drawString(getText(), tx, ty);
+                if (isFocusOwner()) {
+                    g2.setColor(RING);
+                    g2.setStroke(new BasicStroke(2f));
+                    g2.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, RADIUS, RADIUS);
+                }
                 g2.dispose();
             }
         };
@@ -644,11 +673,11 @@ public class Theme {
                 int y = thumbRect.y + (thumbRect.height - size) / 2;
 
                 // Shadow
-                g2.setColor(new Color(0, 0, 0, 40));
+                g2.setColor(SHADOW);
                 g2.fillOval(x + 1, y + 1, size, size);
 
                 // Thumb
-                g2.setColor(FG);
+                g2.setColor(THUMB);
                 g2.fillOval(x, y, size, size);
 
                 // Border

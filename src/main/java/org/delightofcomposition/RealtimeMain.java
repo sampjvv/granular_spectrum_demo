@@ -3,20 +3,18 @@ package org.delightofcomposition;
 import javax.sound.midi.MidiDevice;
 import javax.sound.midi.Transmitter;
 
+import org.delightofcomposition.analysis.SpectralAnalysis;
 import org.delightofcomposition.midi.MidiInputHandler;
 import org.delightofcomposition.realtime.AudioEngine;
 import org.delightofcomposition.realtime.ControlState;
+import org.delightofcomposition.realtime.GrainSchedule;
 import org.delightofcomposition.realtime.Voice;
-import org.delightofcomposition.sound.FFT2;
 import org.delightofcomposition.sound.Normalize;
 import org.delightofcomposition.sound.ReadSound;
-import org.delightofcomposition.sound.WaveWriter;
 
 public class RealtimeMain {
 
     private static final int MAX_VOICES = 16;
-    private static final int NUM_LAYERS = 5;
-    private static final double[] LAYER_DENSITIES = {0.05, 0.15, 0.20, 0.30, 0.30};
 
     public static AudioEngine start(String sourcePath, String grainPath, double grainOrigFreq) {
         System.out.println("=== Real-Time MIDI Granular Spectrum ===");
@@ -27,38 +25,28 @@ public class RealtimeMain {
         double[] sourceSample = ReadSound.readSoundDoubles(sourcePath);
         Normalize.normalize(sourceSample);
 
-        // Detect source fundamental frequency
-        double sourceFundamental = FFT2.getPitch(sourceSample, WaveWriter.SAMPLE_RATE);
-        System.out.println("Detected source fundamental: " + String.format("%.1f", sourceFundamental) + " Hz");
-
         // Set up synthesis parameters
         SynthParameters params = new SynthParameters();
         params.grainReferenceFreq = grainOrigFreq;
 
-        // Pre-render 3 granular layers with different random seeds
-        double[][] granularLayers = new double[NUM_LAYERS][];
-        for (int i = 0; i < NUM_LAYERS; i++) {
-            long seedOffset = i * 1000L;
-            System.out.println("Rendering granular layer " + (i + 1) + "/" + NUM_LAYERS
-                    + " (seed offset " + seedOffset + ")...");
-            double[] layerSource = ReadSound.readSoundDoubles(sourcePath);
-            Normalize.normalize(layerSource);
-            granularLayers[i] = Demo.renderGranularLayer(layerSource, params, seedOffset, LAYER_DENSITIES[i], null);
-            if (granularLayers[i] == null) {
-                System.err.println("Render cancelled or failed.");
-                return null;
-            }
-        }
-        System.out.println("All layers rendered.");
+        // Run spectral analysis
+        SpectralAnalysis analysis = SpectralAnalysis.analyze(
+                sourceSample, params.getWindowSize(), params.controlRate);
+
+        // Build grain schedule
+        GrainSchedule schedule = GrainSchedule.build(
+                analysis, sourceSample, grainPath, grainOrigFreq,
+                params.impulseResponseFile.getPath(),
+                params.useReverb, params.synthReverbMix,
+                params.grainsPerPeak);
 
         // Create engine components
         ControlState controls = new ControlState();
-        SynthParameters defaults = new SynthParameters();
         Voice[] voices = new Voice[MAX_VOICES];
         for (int i = 0; i < MAX_VOICES; i++) {
             voices[i] = new Voice();
-            voices[i].setBuffers(granularLayers, sourceSample,
-                    defaults.dramaticFactor, defaults.dramaticEnvShape);
+            voices[i].setGrainSchedule(schedule,
+                    params.dramaticFactor, params.dramaticEnvShape);
         }
 
         // Create audio engine
@@ -69,7 +57,7 @@ public class RealtimeMain {
         if (midiDevice != null) {
             try {
                 Transmitter transmitter = midiDevice.getTransmitter();
-                MidiInputHandler handler = new MidiInputHandler(voices, controls, sourceFundamental);
+                MidiInputHandler handler = new MidiInputHandler(voices, controls);
                 transmitter.setReceiver(handler);
                 System.out.println("MIDI input connected.");
             } catch (Exception e) {
@@ -82,13 +70,14 @@ public class RealtimeMain {
         // Start audio engine
         Thread audioThread = new Thread(engine, "AudioEngine");
         audioThread.setDaemon(true);
+        audioThread.setPriority(Thread.MAX_PRIORITY);
         audioThread.start();
 
         System.out.println();
         System.out.println("Controls:");
         System.out.println("  MIDI notes  -> play granular spectrum at pitch");
         System.out.println("  Mod wheel   -> mix (granular <-> source)");
-        System.out.println("  CC#74       -> grain density (layers)");
+        System.out.println("  CC#74       -> grain density");
         System.out.println();
 
         return engine;

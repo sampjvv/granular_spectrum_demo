@@ -224,7 +224,7 @@ public class PianoKeyboard extends JComponent {
         if (voices == null) return;
         for (Voice v : voices) {
             if (!v.isActive()) {
-                v.noteOn(note, 100, sourceFundamentalHz);
+                v.noteOn(note, 100);
                 return;
             }
         }

@@ -112,6 +112,7 @@ public class Demo {
 
         double totalDuration = sourceLen / (double) WaveWriter.SAMPLE_RATE;
         final double[] sourceSound = fullSound;
+        final double[] sharedBuf = outSig;
         final int finalOutputLen = outputLen;
 
         // Build list of window times (based on source duration)
@@ -121,14 +122,20 @@ public class Demo {
         }
         int totalWindows = windowTimes.size();
 
-        // Parallel rendering
+        // Pre-compute window function (same for every window)
+        double[] windowFunc = new double[windowSize];
+        for (int i = 0; i < windowSize; i++) {
+            windowFunc[i] = (2 - (Math.cos(Math.PI * 2 * i / (double) (windowSize - 1)) + 1)) / 2.0;
+        }
+
+        // Parallel rendering — shared output buffer, synchronized grain writes
         int nThreads = Runtime.getRuntime().availableProcessors();
         ExecutorService pool = Executors.newFixedThreadPool(nThreads);
         AtomicInteger completedWindows = new AtomicInteger(0);
 
         try {
             int batchSize = (totalWindows + nThreads - 1) / nThreads;
-            List<Future<double[]>> futures = new ArrayList<>();
+            List<Future<Void>> futures = new ArrayList<>();
 
             for (int b = 0; b < nThreads; b++) {
                 int from = b * batchSize;
@@ -139,16 +146,15 @@ public class Demo {
                 final int batchTo = to;
 
                 futures.add(pool.submit(() -> {
-                    double[] localBuf = new double[outLength];
                     for (int idx = batchFrom; idx < batchTo; idx++) {
-                        if (cancelled) return localBuf;
+                        if (cancelled) return null;
 
                         double time = windowTimes.get(idx);
                         Random rng = new Random(idx);
 
-                        processWindow(time, sourceSound, synth, windowSize,
+                        processWindow(time, sourceSound, synth, windowSize, windowFunc,
                                 controlRate, amplitudeThreshold, grainsPerPeak,
-                                probEnv, pitchEnv, usePitchEnv, localBuf, rng,
+                                probEnv, pitchEnv, usePitchEnv, sharedBuf, rng,
                                 finalOutputLen);
 
                         int done = completedWindows.incrementAndGet();
@@ -156,17 +162,14 @@ public class Demo {
                             progress.accept((int) (100.0 * done / totalWindows));
                         }
                     }
-                    return localBuf;
+                    return null;
                 }));
             }
 
-            // Merge thread-local buffers
-            for (Future<double[]> f : futures) {
-                double[] buf = f.get();
+            // Wait for all threads (no merge needed — writes go directly to sharedBuf)
+            for (Future<Void> f : futures) {
+                f.get();
                 if (cancelled) return null;
-                for (int i = 0; i < outSig.length; i++) {
-                    outSig[i] += buf[i];
-                }
             }
         } catch (InterruptedException | ExecutionException e) {
             return null;
@@ -241,7 +244,7 @@ public class Demo {
     }
 
     private static void processWindow(double time, double[] fullSound, Synth synth,
-            int windowSize, double controlRate, double amplitudeThreshold,
+            int windowSize, double[] windowFunc, double controlRate, double amplitudeThreshold,
             int grainsPerPeak, Envelope probEnv, Envelope pitchEnv, boolean usePitchEnv,
             double[] outBuf, Random rng, int outputLen) {
 
@@ -253,8 +256,7 @@ public class Demo {
         double[] fftSample = Arrays.copyOfRange(fullSound, fftStart, fftEnd);
 
         for (int i = 0; i < fftSample.length; i++) {
-            double windowFunction = (2 - (Math.cos(Math.PI * 2 * i / (double) (windowSize - 1)) + 1)) / 2.0;
-            fftSample[i] *= windowFunction;
+            fftSample[i] *= windowFunc[Math.min(i, windowFunc.length - 1)];
         }
 
         double[][] spec = FFT.getTransformRaw(fftSample);
@@ -294,8 +296,10 @@ public class Demo {
                         actualFreq = peakFreq * ratio;
                     }
                     double[] tone = synth.note(actualFreq, peakAmp);
-                    for (int j = 0; j < tone.length && (j + t) < outBuf.length; j++) {
-                        outBuf[j + t] += tone[j];
+                    synchronized (outBuf) {
+                        for (int j = 0; j < tone.length && (j + t) < outBuf.length; j++) {
+                            outBuf[j + t] += tone[j];
+                        }
                     }
                 }
             }
@@ -359,6 +363,7 @@ public class Demo {
 
         double totalDuration = sourceLen / (double) WaveWriter.SAMPLE_RATE;
         final double[] sourceSound = fullSound;
+        final double[] sharedBuf = outSig;
         final int finalOutputLen = outputLen;
 
         List<Double> windowTimes = new ArrayList<>();
@@ -367,13 +372,19 @@ public class Demo {
         }
         int totalWindows = windowTimes.size();
 
+        // Pre-compute window function
+        double[] windowFunc = new double[windowSize];
+        for (int i = 0; i < windowSize; i++) {
+            windowFunc[i] = (2 - (Math.cos(Math.PI * 2 * i / (double) (windowSize - 1)) + 1)) / 2.0;
+        }
+
         int nThreads = Runtime.getRuntime().availableProcessors();
         ExecutorService pool = Executors.newFixedThreadPool(nThreads);
         AtomicInteger completedWindows = new AtomicInteger(0);
 
         try {
             int batchSize = (totalWindows + nThreads - 1) / nThreads;
-            List<Future<double[]>> futures = new ArrayList<>();
+            List<Future<Void>> futures = new ArrayList<>();
 
             for (int b = 0; b < nThreads; b++) {
                 int from = b * batchSize;
@@ -384,16 +395,15 @@ public class Demo {
                 final int batchTo = to;
 
                 futures.add(pool.submit(() -> {
-                    double[] localBuf = new double[outLength];
                     for (int idx = batchFrom; idx < batchTo; idx++) {
-                        if (useExternalCancel ? cancelFlag.get() : cancelled) return localBuf;
+                        if (useExternalCancel ? cancelFlag.get() : cancelled) return null;
 
                         double time = windowTimes.get(idx);
                         Random rng = new Random(idx + seedOffset);
 
-                        processWindow(time, sourceSound, synth, windowSize,
+                        processWindow(time, sourceSound, synth, windowSize, windowFunc,
                                 controlRate, amplitudeThreshold, grainsPerPeak,
-                                probEnv, pitchEnv, usePitchEnv, localBuf, rng,
+                                probEnv, pitchEnv, usePitchEnv, sharedBuf, rng,
                                 finalOutputLen);
 
                         int done = completedWindows.incrementAndGet();
@@ -401,16 +411,13 @@ public class Demo {
                             progress.accept((int) (100.0 * done / totalWindows));
                         }
                     }
-                    return localBuf;
+                    return null;
                 }));
             }
 
-            for (Future<double[]> f : futures) {
-                double[] buf = f.get();
+            for (Future<Void> f : futures) {
+                f.get();
                 if (useExternalCancel ? cancelFlag.get() : cancelled) return null;
-                for (int i = 0; i < outSig.length; i++) {
-                    outSig[i] += buf[i];
-                }
             }
         } catch (InterruptedException | ExecutionException e) {
             return null;

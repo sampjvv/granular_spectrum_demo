@@ -1,11 +1,14 @@
 package org.delightofcomposition.gui;
 
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
@@ -39,11 +42,22 @@ public class ToggleSwitch extends JComponent {
         this.thumbPos = initialState ? 1f : 0f;
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         setOpaque(false);
+        setFocusable(true);
 
         addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
+                requestFocusInWindow();
                 toggle();
+            }
+        });
+
+        addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_SPACE || e.getKeyCode() == KeyEvent.VK_ENTER) {
+                    toggle();
+                }
             }
         });
     }
@@ -94,8 +108,15 @@ public class ToggleSwitch extends JComponent {
         int thumbRange = TRACK_W - THUMB_SIZE - PAD * 2;
         int thumbX = PAD + (int) (thumbPos * thumbRange);
         int thumbY = yOff + PAD;
-        g2.setColor(Color.WHITE);
+        g2.setColor(Theme.THUMB);
         g2.fillOval(thumbX, thumbY, THUMB_SIZE, THUMB_SIZE);
+
+        // Focus ring
+        if (isFocusOwner()) {
+            g2.setColor(Theme.RING);
+            g2.setStroke(new BasicStroke(2f));
+            g2.drawRoundRect(0, yOff, TRACK_W - 1, TRACK_H - 1, TRACK_H, TRACK_H);
+        }
 
         g2.dispose();
     }
