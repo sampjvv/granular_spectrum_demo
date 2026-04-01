@@ -9,6 +9,26 @@ import java.awt.Font;
  */
 public enum ThemePreset {
 
+    PAPER("Paper",
+        /* ZINC 50-950: darks for text, rest near-white */
+        c(30,30,30), c(50,50,50), c(90,90,90), c(140,140,140),
+        c(200,200,200), c(210,210,210), c(222,222,222), c(234,234,234),
+        c(242,242,242), c(250,250,250), c(255,255,255),
+        /* BG, BG_CARD, BG_MUTED, BG_INPUT */
+        c(252,252,252), c(255,255,255), c(240,240,240), c(248,248,248),
+        /* BORDER, BORDER_SUBTLE */
+        c(225,225,225), c(238,238,238),
+        /* FG, FG_MUTED, FG_DIM */
+        c(30,30,30), c(140,140,140), c(195,195,195),
+        /* ACCENT (blue), ACCENT_HOVER, ACCENT_MUTED, ACCENT_FILL, RING */
+        c(0xd0,0xd7,0xf0), c(0xd0,0xd7,0xf0), c(0xd0,0xd7,0xf0,12), c(0xd0,0xd7,0xf0,12), c(0xd0,0xd7,0xf0,40),
+        /* DESTRUCTIVE (pink for pitch env), SUCCESS (green), SUCCESS_FILL, AMBER (yellow for dynamics env), AMBER_FILL */
+        c(0xe8,0x90,0xb0), c(0xc2,0xe8,0xc2), c(0x9c,0xe0,0x9c,20), c(0xe0,0xd0,0x70), c(0xe0,0xd0,0x70,20),
+        /* fonts */
+        null, null, null, null, null, null, null,
+        /* radii */
+        6, 4, 10),
+
     DEFAULT_DARK("Midnight Indigo",
         /* ZINC 50-950 */
         c(250,250,250), c(244,244,245), c(228,228,231), c(212,212,216),
@@ -22,26 +42,12 @@ public enum ThemePreset {
         c(250,250,250), c(161,161,170), c(113,113,122),
         /* ACCENT, ACCENT_HOVER, ACCENT_MUTED, ACCENT_FILL, RING */
         c(99,102,241), c(129,140,248), c(99,102,241,30), c(99,102,241,30), c(99,102,241,80),
-        /* DESTRUCTIVE, SUCCESS, SUCCESS_FILL, AMBER, AMBER_FILL */
-        c(239,68,68), c(34,197,94), c(34,197,94,30), c(245,158,11), c(245,158,11,30),
+        /* DESTRUCTIVE (coral for pitch env), SUCCESS, SUCCESS_FILL, AMBER, AMBER_FILL */
+        c(240,128,88), c(34,197,94), c(34,197,94,30), c(245,158,11), c(245,158,11,30),
         /* fonts (null = keep defaults) */
         null, null, null, null, null, null, null,
         /* RADIUS, RADIUS_SM, RADIUS_LG (-1 = keep defaults) */
         -1, -1, -1),
-
-    TAPE_MACHINE("Warm Analog Studio",
-        c(232,220,200), c(210,198,178), c(185,172,152), c(160,146,126),
-        c(130,118,100), c(100,90,76), c(76,68,56), c(56,48,38),
-        c(38,32,24), c(28,23,17), c(20,16,12),
-        c(20,16,12), c(28,23,17), c(38,32,24), c(32,26,19),
-        c(56,48,38), c(46,40,30),
-        c(232,220,200), c(130,118,100), c(100,90,76),
-        c(212,118,58), c(232,148,88), c(212,118,58,30), c(212,118,58,30), c(212,118,58,80),
-        c(220,60,50), c(160,190,80), c(160,190,80,30), c(218,180,50), c(218,180,50,30),
-        f("Consolas",Font.PLAIN,13), f("Consolas",Font.PLAIN,11), f("Consolas",Font.PLAIN,12),
-        f("Consolas",Font.BOLD,13), f("Consolas",Font.BOLD,11), f("Consolas",Font.PLAIN,14),
-        f("Consolas",Font.BOLD,10),
-        6, 4, 10),
 
     NEON_OUTRUN("Synthwave",
         /* ZINC 50-950: purple-tinted grayscale */
@@ -61,51 +67,7 @@ public enum ThemePreset {
         /* fonts: null = overridden in Theme.applyTheme() with SynthwaveFonts */
         null, null, null, null, null, null, null,
         /* radii: -1 = keep defaults (pixel corners are handled by SynthwavePainter) */
-        -1, -1, -1),
-
-    CYAN("Cyan Glow",
-        c(230,250,252), c(210,238,242), c(180,218,225), c(150,198,208),
-        c(110,165,178), c(80,130,145), c(58,98,110), c(42,72,82),
-        c(28,48,56), c(18,32,40), c(8,16,22),
-        c(8,16,22), c(18,32,40), c(28,48,56), c(14,26,34),
-        c(35,60,72), c(24,44,54),
-        c(230,250,252), c(110,165,178), c(80,130,145),
-        c(0,210,220), c(50,235,245), c(0,210,220,30), c(0,210,220,30), c(0,210,220,80),
-        c(239,68,68), c(34,220,160), c(34,220,160,30), c(245,190,50), c(245,190,50,30),
-        null, null, null, null, null, null, null,
-        -1, -1, -1),
-
-    DAYLIGHT("Daylight",
-        /* ZINC 50-950: inverted — darks first (FG), lights last (BG) */
-        c(32,32,38), c(50,50,58), c(72,72,82), c(100,100,112),
-        c(130,130,142), c(158,158,168), c(188,188,196), c(208,208,214),
-        c(228,228,232), c(238,238,242), c(245,245,248),
-        /* BG, BG_CARD, BG_MUTED, BG_INPUT */
-        c(245,245,248), c(255,255,255), c(228,228,232), c(238,238,242),
-        /* BORDER, BORDER_SUBTLE */
-        c(208,208,214), c(222,222,228),
-        /* FG, FG_MUTED, FG_DIM */
-        c(32,32,38), c(100,100,112), c(158,158,168),
-        /* ACCENT, ACCENT_HOVER, ACCENT_MUTED, ACCENT_FILL, RING */
-        c(67,56,202), c(79,70,229), c(67,56,202,20), c(67,56,202,20), c(67,56,202,60),
-        /* DESTRUCTIVE, SUCCESS, SUCCESS_FILL, AMBER, AMBER_FILL */
-        c(220,38,38), c(22,163,74), c(22,163,74,20), c(217,119,6), c(217,119,6,20),
-        /* fonts */
-        null, null, null, null, null, null, null,
-        /* radii */
-        -1, -1, -1),
-
-    MODULAR("Eurorack Patching",
-        c(220,220,220), c(200,200,200), c(175,175,175), c(150,150,150),
-        c(120,120,120), c(95,95,95), c(72,72,72), c(55,55,55),
-        c(40,40,40), c(30,30,30), c(22,22,22),
-        c(22,22,22), c(30,30,30), c(40,40,40), c(26,26,26),
-        c(100,100,100), c(65,65,65),
-        c(220,220,220), c(150,150,150), c(100,100,100),
-        c(255,50,50), c(255,90,90), c(255,50,50,35), c(255,50,50,35), c(255,50,50,80),
-        c(255,30,30), c(50,255,50), c(50,255,50,30), c(255,204,0), c(255,204,0,30),
-        null, null, null, null, null, null, null,
-        4, 2, 8);
+        -1, -1, -1);
 
     // ── Instance fields ──
 

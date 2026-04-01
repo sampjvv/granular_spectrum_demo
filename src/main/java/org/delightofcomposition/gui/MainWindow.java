@@ -54,6 +54,7 @@ public class MainWindow extends JFrame {
 
     private final SynthParameters params = new SynthParameters();
     private final JProgressBar progressBar;
+    private final JLabel progressLabel;
     private final AudioPlayer player = new AudioPlayer();
     private final RenderController renderController;
 
@@ -116,6 +117,18 @@ public class MainWindow extends JFrame {
         liveController = new LiveMidiController();
 
         progressBar = Theme.styledProgressBar();
+        progressLabel = Theme.valueLabel("");
+        Theme.tagFont(progressLabel, "small");
+
+        // Show percentage next to bar whenever value changes
+        progressBar.addChangeListener(e -> {
+            int val = progressBar.getValue();
+            if (val > 0 && val < 100) {
+                progressLabel.setText(val + "%");
+            } else {
+                progressLabel.setText("");
+            }
+        });
 
         renderController = new RenderController(progressBar, new RenderController.RenderCallback() {
             @Override
@@ -126,7 +139,6 @@ public class MainWindow extends JFrame {
                 exportBtn.setEnabled(true);
                 saveToLibBtn.setEnabled(true);
                 progressBar.setValue(100);
-                progressBar.setString("Done");
                 if (waveformDisplay != null) {
                     waveformDisplay.setBuffer(stereoBuffer);
                 }
@@ -135,7 +147,6 @@ public class MainWindow extends JFrame {
             @Override
             public void onError(String message) {
                 renderBtn.setEnabled(true);
-                progressBar.setString("Error");
                 JOptionPane.showMessageDialog(MainWindow.this,
                         "Render error: " + message, "Error", JOptionPane.ERROR_MESSAGE);
             }
@@ -144,7 +155,6 @@ public class MainWindow extends JFrame {
             public void onCancelled() {
                 renderBtn.setEnabled(true);
                 progressBar.setValue(0);
-                progressBar.setString("Cancelled");
             }
         });
 
@@ -162,7 +172,7 @@ public class MainWindow extends JFrame {
         stopBtn.setEnabled(true);
         exportBtn.setEnabled(false);
         saveToLibBtn.setEnabled(false);
-        progressBar.setString("Ready");
+        progressLabel.setText("");
 
         // Window close: stop live engine if running
         addWindowListener(new WindowAdapter() {
@@ -412,6 +422,8 @@ public class MainWindow extends JFrame {
         progressBar.setPreferredSize(new Dimension(150, 20));
         progressBar.setMinimumSize(new Dimension(80, 20));
         wavToolbar.add(progressBar);
+        wavToolbar.add(Box.createHorizontalStrut(6));
+        wavToolbar.add(progressLabel);
 
         toolbarCards.add(wavToolbar, WAV_MODE);
 
@@ -793,7 +805,7 @@ public class MainWindow extends JFrame {
         playBtn.setEnabled(false);
         exportBtn.setEnabled(false);
         saveToLibBtn.setEnabled(false);
-        progressBar.setString("Rendering...");
+        progressLabel.setText("");
         renderController.render(params);
     }
 

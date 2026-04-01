@@ -771,7 +771,7 @@ public class Theme {
         bar.setUI(createProgressBarUI(bar));
         bar.setOpaque(false);
         bar.setBorder(BorderFactory.createEmptyBorder());
-        bar.setStringPainted(true);
+        bar.setStringPainted(false);
         tagFont(bar, "small");
         return bar;
     }
@@ -837,6 +837,7 @@ public class Theme {
         JLabel label = new JLabel(text.toUpperCase());
         tagFont(label, "title");
         tagFg(label, "sectionFg");
+        label.setBorder(javax.swing.BorderFactory.createEmptyBorder(2, 0, 0, 0));
         return label;
     }
 
@@ -977,6 +978,7 @@ public class Theme {
         tagFont(label, "section");
         tagFg(label, "sectionFg");
         label.setAlignmentX(0);
+        label.setBorder(javax.swing.BorderFactory.createEmptyBorder(2, 0, 0, 0));
         panel.add(label);
         panel.add(javax.swing.Box.createVerticalStrut(4));
 
@@ -992,7 +994,7 @@ public class Theme {
         divider.setAlignmentX(0);
         panel.add(divider);
 
-        panel.setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, 30));
+        panel.setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, 34));
         return panel;
     }
 

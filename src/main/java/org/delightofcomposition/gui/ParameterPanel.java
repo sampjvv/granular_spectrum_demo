@@ -368,7 +368,7 @@ public class ParameterPanel extends JPanel implements Scrollable {
         btn.setPreferredSize(new Dimension(36, 36));
         btn.setMinimumSize(new Dimension(36, 36));
         btn.setMaximumSize(new Dimension(36, 36));
-        btn.setToolTipText("Preview sample");
+        HelpManager.getInstance().register(btn, "Preview sample");
         return btn;
     }
 

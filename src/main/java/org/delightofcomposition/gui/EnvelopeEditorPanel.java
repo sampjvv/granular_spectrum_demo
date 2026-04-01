@@ -129,21 +129,18 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
 
     private JPanel buildEditorCard(String title, String helpText, EnvelopeCanvas canvas,
                                    Envelope envelope, JComponent titleExtra) {
-        JPanel card = new JPanel(new BorderLayout(0, 4)) {
+        JPanel card = new JPanel(new BorderLayout(0, 8)) {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 if (Theme.isSynthwave()) {
                     SynthwavePainter.fillPanel(g2, 0, 0, getWidth(), getHeight(),
-                            Theme.BG_CARD, Theme.BORDER);
+                            Theme.BG_CARD, Theme.BG_CARD);
                     SynthwavePainter.paintBevel(g2, 0, 0, getWidth(), getHeight(), true);
                 } else {
                     g2.setColor(Theme.BG_CARD);
                     g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
-                            Theme.RADIUS_LG, Theme.RADIUS_LG);
-                    g2.setColor(Theme.BORDER);
-                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
                             Theme.RADIUS_LG, Theme.RADIUS_LG);
                 }
                 g2.dispose();
@@ -170,21 +167,22 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
         JLabel helpLabel = new JLabel(helpText);
         Theme.tagFont(helpLabel, "small");
         Theme.tagFg(helpLabel, "fgDim");
+        helpLabel.setBorder(BorderFactory.createEmptyBorder(3, 5, 0, 0));
         titleArea.add(helpLabel, BorderLayout.SOUTH);
         header.add(titleArea, BorderLayout.CENTER);
 
         // Button bar
-        JPanel buttonBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 1, 0));
+        JPanel buttonBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         buttonBar.setOpaque(false);
 
         JButton resetBtn = Theme.ghostButton("Reset");
         Theme.tagFont(resetBtn, "small");
-        resetBtn.setPreferredSize(new Dimension(75, 26));
+        resetBtn.setPreferredSize(new Dimension(58, 26));
         resetBtn.addActionListener(e -> canvas.reset());
 
         JButton undoBtn = Theme.ghostButton("Undo");
         Theme.tagFont(undoBtn, "small");
-        undoBtn.setPreferredSize(new Dimension(70, 26));
+        undoBtn.setPreferredSize(new Dimension(52, 26));
         undoBtn.setEnabled(false);
         undoBtn.addActionListener(e -> {
             canvas.undo();

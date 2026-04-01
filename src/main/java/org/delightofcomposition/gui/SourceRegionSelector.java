@@ -29,6 +29,7 @@ public class SourceRegionSelector extends JComponent {
     private static final int HANDLE_W = 8;
     private static final int HIT_ZONE = 10;
     private static final int LABEL_PAD = 6;
+    private static final int PAD_H = 6; // horizontal padding to keep handles in bounds
 
     private final SynthParameters params;
     private float[] waveformData;
@@ -50,9 +51,10 @@ public class SourceRegionSelector extends JComponent {
             public void mousePressed(MouseEvent e) {
                 if (waveformData == null) return;
                 int w = getWidth();
-                double frac = e.getX() / (double) w;
-                double startX = params.sourceStartFraction * w;
-                double endX = params.sourceEndFraction * w;
+                int waveW = w - 2 * PAD_H;
+                double frac = Math.max(0, Math.min(1, (e.getX() - PAD_H) / (double) waveW));
+                double startX = PAD_H + params.sourceStartFraction * waveW;
+                double endX = PAD_H + params.sourceEndFraction * waveW;
 
                 if (Math.abs(e.getX() - startX) <= HIT_ZONE) {
                     dragging = Drag.START;
@@ -69,7 +71,8 @@ public class SourceRegionSelector extends JComponent {
             @Override
             public void mouseDragged(MouseEvent e) {
                 if (dragging == Drag.NONE || waveformData == null) return;
-                double frac = Math.max(0, Math.min(1, e.getX() / (double) getWidth()));
+                int waveW = getWidth() - 2 * PAD_H;
+                double frac = Math.max(0, Math.min(1, (e.getX() - PAD_H) / (double) waveW));
                 double minRegion = 0.01;
 
                 switch (dragging) {
@@ -101,12 +104,13 @@ public class SourceRegionSelector extends JComponent {
             @Override
             public void mouseMoved(MouseEvent e) {
                 if (waveformData == null) return;
-                double startX = params.sourceStartFraction * getWidth();
-                double endX = params.sourceEndFraction * getWidth();
+                int waveW = getWidth() - 2 * PAD_H;
+                double startX = PAD_H + params.sourceStartFraction * waveW;
+                double endX = PAD_H + params.sourceEndFraction * waveW;
                 if (Math.abs(e.getX() - startX) <= HIT_ZONE || Math.abs(e.getX() - endX) <= HIT_ZONE) {
                     setCursor(Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR));
                 } else {
-                    double frac = e.getX() / (double) getWidth();
+                    double frac = Math.max(0, Math.min(1, (e.getX() - PAD_H) / (double) waveW));
                     if (frac > params.sourceStartFraction && frac < params.sourceEndFraction) {
                         setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
                     } else {
@@ -179,12 +183,13 @@ public class SourceRegionSelector extends JComponent {
         int waveH = h - padTop - padBot;
         int centerY = padTop + waveH / 2;
 
-        // Draw waveform
+        // Draw waveform (within padded area)
+        int waveW = w - 2 * PAD_H;
         g2.setColor(new Color(Theme.ACCENT.getRed(), Theme.ACCENT.getGreen(),
                 Theme.ACCENT.getBlue(), 100));
-        for (int px = 0; px < w; px++) {
-            int s0 = (int) ((long) px * waveformData.length / w);
-            int s1 = (int) ((long) (px + 1) * waveformData.length / w);
+        for (int px = 0; px < waveW; px++) {
+            int s0 = (int) ((long) px * waveformData.length / waveW);
+            int s1 = (int) ((long) (px + 1) * waveformData.length / waveW);
             s0 = Math.max(0, Math.min(waveformData.length - 1, s0));
             s1 = Math.max(s0 + 1, Math.min(waveformData.length, s1));
             float minVal = 0, maxVal = 0;
@@ -194,12 +199,12 @@ public class SourceRegionSelector extends JComponent {
             }
             int yMin = centerY - (int) (maxVal * (waveH / 2));
             int yMax = centerY - (int) (minVal * (waveH / 2));
-            if (yMax - yMin > 0) g2.fillRect(px, yMin, 1, yMax - yMin);
+            if (yMax - yMin > 0) g2.fillRect(PAD_H + px, yMin, 1, yMax - yMin);
         }
 
         // Dim outside selected region
-        int startX = (int) (params.sourceStartFraction * w);
-        int endX = (int) (params.sourceEndFraction * w);
+        int startX = PAD_H + (int) (params.sourceStartFraction * waveW);
+        int endX = PAD_H + (int) (params.sourceEndFraction * waveW);
 
         Color dim = new Color(Theme.BG.getRed(), Theme.BG.getGreen(), Theme.BG.getBlue(), 160);
         if (startX > 0) {
@@ -237,20 +242,20 @@ public class SourceRegionSelector extends JComponent {
         // Total duration (top left)
         g2.setColor(Theme.FG_DIM);
         String totalStr = formatDuration(totalSec);
-        g2.drawString(totalStr, LABEL_PAD, fm.getAscent() + 2);
+        g2.drawString(totalStr, PAD_H + LABEL_PAD, fm.getAscent() + 2);
 
         // Selected duration (bottom center)
         String selStr = "Selection: " + formatDuration(regionSec);
         int selW = fm.stringWidth(selStr);
         int selX = (startX + endX - selW) / 2;
-        selX = Math.max(LABEL_PAD, Math.min(w - selW - LABEL_PAD, selX));
+        selX = Math.max(PAD_H + LABEL_PAD, Math.min(w - PAD_H - selW - LABEL_PAD, selX));
         g2.setColor(Theme.FG);
-        g2.drawString(selStr, selX, h - padBot / 2 + fm.getAscent() / 2);
+        g2.drawString(selStr, selX, h - padBot / 2 + fm.getAscent() / 2 - 4);
 
         // Output duration (top right)
         String outStr = "Output: " + formatDuration(outputSec);
         g2.setColor(Theme.FG_DIM);
-        g2.drawString(outStr, w - fm.stringWidth(outStr) - LABEL_PAD, fm.getAscent() + 2);
+        g2.drawString(outStr, w - PAD_H - fm.stringWidth(outStr) - LABEL_PAD, fm.getAscent() + 2);
 
         // Focus ring
         if (isFocusOwner() && !Theme.isSynthwave()) {

@@ -122,7 +122,7 @@ public class ToggleSwitch extends JComponent {
             }
         } else {
             // iOS-style pill
-            Color trackColor = interpolateColor(Theme.ZINC_700, Theme.ACCENT, thumbPos);
+            Color trackColor = interpolateColor(Theme.ZINC_700, Theme.SUCCESS, thumbPos);
             g2.setColor(trackColor);
             g2.fillRoundRect(0, yOff, TRACK_W, TRACK_H, TRACK_H, TRACK_H);
 

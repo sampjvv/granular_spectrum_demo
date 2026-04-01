@@ -348,9 +348,9 @@ public class PianoKeyboard extends JComponent {
                     g2.setStroke(new java.awt.BasicStroke(2f));
                     g2.drawRect(kx, 0, kw - 1, h - 1);
                 } else {
-                    g2.setColor(active ? Theme.ACCENT : Theme.ZINC_200);
+                    g2.setColor(active ? Theme.ACCENT : Color.WHITE);
                     g2.fillRect(kx, 0, kw - 1, h - 1);
-                    g2.setColor(Theme.BORDER);
+                    g2.setColor(new Color(180, 180, 180));
                     g2.drawRect(kx, 0, kw - 1, h - 1);
                 }
 
@@ -368,7 +368,7 @@ public class PianoKeyboard extends JComponent {
                     FontMetrics fm = g2.getFontMetrics();
                     int tx = kx + (kw - fm.stringWidth(label)) / 2;
                     int ty = h - 4;
-                    g2.setColor(Theme.ZINC_500);
+                    g2.setColor(new Color(160, 160, 160));
                     g2.drawString(label, tx, ty);
                 }
 
@@ -408,9 +408,9 @@ public class PianoKeyboard extends JComponent {
                     g2.setStroke(new java.awt.BasicStroke(2f));
                     g2.drawRect((int) bx, 0, (int) bw, blackHeight);
                 } else {
-                    g2.setColor(active ? Theme.ACCENT : Theme.ZINC_900);
+                    g2.setColor(active ? Theme.ACCENT : new Color(30, 30, 30));
                     g2.fillRoundRect((int) bx, 0, (int) bw, blackHeight, 4, 4);
-                    g2.setColor(Theme.BORDER);
+                    g2.setColor(new Color(20, 20, 20));
                     g2.drawRoundRect((int) bx, 0, (int) bw, blackHeight, 4, 4);
                 }
             } else {
