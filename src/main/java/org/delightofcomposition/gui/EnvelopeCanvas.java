@@ -161,8 +161,12 @@ public class EnvelopeCanvas extends JComponent {
         int h = getHeight();
 
         // Background
-        g2.setColor(Theme.BG_INPUT);
-        g2.fillRoundRect(0, 0, w - 1, h - 1, Theme.RADIUS, Theme.RADIUS);
+        if (Theme.isSynthwave()) {
+            SynthwavePainter.fillPanel(g2, 0, 0, w, h, Theme.BG_INPUT, Theme.SW_PURPLE);
+        } else {
+            g2.setColor(Theme.BG_INPUT);
+            g2.fillRoundRect(0, 0, w - 1, h - 1, Theme.RADIUS, Theme.RADIUS);
+        }
 
         // Minimap when zoomed
         if (isZoomed()) {
@@ -272,10 +276,24 @@ public class EnvelopeCanvas extends JComponent {
         g2.clipRect(0, 0, w, h);
 
         // Fill area under curve
-        g2.setColor(fillColor);
+        if (Theme.isSynthwave()) {
+            // Gradient fill: accent to transparent
+            java.awt.GradientPaint gp = new java.awt.GradientPaint(
+                    0, 0, new Color(curveColor.getRed(), curveColor.getGreen(), curveColor.getBlue(), 50),
+                    0, h, new Color(curveColor.getRed(), curveColor.getGreen(), curveColor.getBlue(), 5));
+            g2.setPaint(gp);
+        } else {
+            g2.setColor(fillColor);
+        }
         g2.fill(fillPath);
 
-        // Draw curve line (2px)
+        // Draw curve line — synthwave gets glow effect
+        if (Theme.isSynthwave()) {
+            // Glow pass: wider, semi-transparent
+            g2.setColor(new Color(curveColor.getRed(), curveColor.getGreen(), curveColor.getBlue(), 40));
+            g2.setStroke(new BasicStroke(6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g2.draw(curvePath);
+        }
         g2.setColor(curveColor);
         g2.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         g2.draw(curvePath);
@@ -292,14 +310,17 @@ public class EnvelopeCanvas extends JComponent {
             boolean isHovered = (i == hoveredNodeIndex);
             int size = isHovered ? NODE_HOVER_SIZE : NODE_SIZE;
 
-            // Thumb fill
-            g2.setColor(Theme.THUMB);
-            g2.fillOval(sx - size / 2, sy - size / 2, size, size);
-
-            // Border
-            g2.setColor(isHovered ? Theme.ACCENT_HOVER : curveColor);
-            g2.setStroke(new BasicStroke(2f));
-            g2.drawOval(sx - size / 2, sy - size / 2, size - 1, size - 1);
+            if (Theme.isSynthwave()) {
+                // Square nodes with pixel corners
+                SynthwavePainter.fillPanel(g2, sx - size / 2, sy - size / 2, size, size,
+                        Theme.SW_LAVENDER, isHovered ? Theme.ACCENT_HOVER : curveColor);
+            } else {
+                g2.setColor(Theme.THUMB);
+                g2.fillOval(sx - size / 2, sy - size / 2, size, size);
+                g2.setColor(isHovered ? Theme.ACCENT_HOVER : curveColor);
+                g2.setStroke(new BasicStroke(2f));
+                g2.drawOval(sx - size / 2, sy - size / 2, size - 1, size - 1);
+            }
         }
 
         // Snap crosshairs when dragging
@@ -326,11 +347,15 @@ public class EnvelopeCanvas extends JComponent {
         }
 
         // Focus ring
-        if (isFocusOwner()) {
+        if (isFocusOwner() && !Theme.isSynthwave()) {
             g2.setClip(null); // reset clip from zoom
-            g2.setColor(Theme.RING);
-            g2.setStroke(new BasicStroke(2f));
-            g2.drawRoundRect(1, 1, w - 3, h - 3, Theme.RADIUS, Theme.RADIUS);
+            if (Theme.isSynthwave()) {
+                SynthwavePainter.strokeShape(g2, 1, 1, w - 2, h - 2, Theme.RING);
+            } else {
+                g2.setColor(Theme.RING);
+                g2.setStroke(new BasicStroke(2f));
+                g2.drawRoundRect(1, 1, w - 3, h - 3, Theme.RADIUS, Theme.RADIUS);
+            }
         }
 
         // Update times/values arrays

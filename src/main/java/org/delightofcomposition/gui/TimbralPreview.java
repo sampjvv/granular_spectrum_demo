@@ -126,7 +126,7 @@ public class TimbralPreview extends JComponent {
             double dotSize;
             if (pitchOn) {
                 double pitchRatio = Math.max(0.25, interpolate(pitchEnv, t));
-                double pitchNorm = clamp(Math.log(pitchRatio) / Math.log(2) / 4.0 + 0.5, 0.0, 1.0);
+                double pitchNorm = clamp(1.0 - (Math.log(pitchRatio) / Math.log(2) / 4.0 + 0.5), 0.0, 1.0);
                 dotSize = Math.max(0.5, Math.min(5.0, pitchNorm * 4.0 + 0.5));
             } else {
                 dotSize = 2.5;

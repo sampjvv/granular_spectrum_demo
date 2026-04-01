@@ -96,26 +96,47 @@ public class ToggleSwitch extends JComponent {
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-        // Center track vertically
         int yOff = (getHeight() - TRACK_H) / 2;
 
-        // Track
-        Color trackColor = interpolateColor(Theme.ZINC_700, Theme.ACCENT, thumbPos);
-        g2.setColor(trackColor);
-        g2.fillRoundRect(0, yOff, TRACK_W, TRACK_H, TRACK_H, TRACK_H);
+        if (Theme.isSynthwave()) {
+            // Track with LG corners to match the thumb's proportional roundedness
+            Color trackColor = interpolateColor(Theme.SW_BG_DEEP, Theme.SW_GREEN, thumbPos);
+            java.awt.Polygon trackOuter = SynthwavePainter.pixelCornerShape(0, yOff, TRACK_W, TRACK_H, SynthwavePainter.CornerSize.LG);
+            g2.setColor(Theme.SW_PURPLE);
+            g2.fillPolygon(trackOuter);
+            java.awt.Polygon trackInner = SynthwavePainter.pixelCornerShapeInset(0, yOff, TRACK_W, TRACK_H, SynthwavePainter.CornerSize.LG, SynthwavePainter.BORDER_WIDTH);
+            g2.setColor(trackColor);
+            g2.fillPolygon(trackInner);
 
-        // Thumb
-        int thumbRange = TRACK_W - THUMB_SIZE - PAD * 2;
-        int thumbX = PAD + (int) (thumbPos * thumbRange);
-        int thumbY = yOff + PAD;
-        g2.setColor(Theme.THUMB);
-        g2.fillOval(thumbX, thumbY, THUMB_SIZE, THUMB_SIZE);
+            // Thumb with matching corners
+            int thumbRange = TRACK_W - THUMB_SIZE - PAD * 2;
+            int thumbX = PAD + (int) (thumbPos * thumbRange);
+            int thumbY = yOff + PAD;
+            SynthwavePainter.fillShape(g2, thumbX, thumbY, THUMB_SIZE, THUMB_SIZE, Theme.SW_LAVENDER);
+            SynthwavePainter.paintBevel(g2, thumbX, thumbY, THUMB_SIZE, THUMB_SIZE, true);
 
-        // Focus ring
-        if (isFocusOwner()) {
-            g2.setColor(Theme.RING);
-            g2.setStroke(new BasicStroke(2f));
-            g2.drawRoundRect(0, yOff, TRACK_W - 1, TRACK_H - 1, TRACK_H, TRACK_H);
+            // Green LED glow when on
+            if (thumbPos > 0.5f) {
+                SynthwavePainter.paintGlow(g2, thumbX, thumbY, THUMB_SIZE, THUMB_SIZE,
+                        Theme.SW_GREEN, 3);
+            }
+        } else {
+            // iOS-style pill
+            Color trackColor = interpolateColor(Theme.ZINC_700, Theme.ACCENT, thumbPos);
+            g2.setColor(trackColor);
+            g2.fillRoundRect(0, yOff, TRACK_W, TRACK_H, TRACK_H, TRACK_H);
+
+            int thumbRange = TRACK_W - THUMB_SIZE - PAD * 2;
+            int thumbX = PAD + (int) (thumbPos * thumbRange);
+            int thumbY = yOff + PAD;
+            g2.setColor(Theme.THUMB);
+            g2.fillOval(thumbX, thumbY, THUMB_SIZE, THUMB_SIZE);
+
+            if (isFocusOwner()) {
+                g2.setColor(Theme.RING);
+                g2.setStroke(new BasicStroke(2f));
+                g2.drawRoundRect(0, yOff, TRACK_W - 1, TRACK_H - 1, TRACK_H, TRACK_H);
+            }
         }
 
         g2.dispose();

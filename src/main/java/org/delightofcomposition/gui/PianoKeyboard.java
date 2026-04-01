@@ -1,5 +1,6 @@
 package org.delightofcomposition.gui;
 
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
@@ -306,6 +307,7 @@ public class PianoKeyboard extends JComponent {
         if (whiteCount == 0) { g2.dispose(); return; }
         double whiteWidth = (double) w / whiteCount;
         int blackHeight = (int) (h * 0.6);
+        boolean sw = Theme.isSynthwave();
 
         // Draw white keys
         int whiteIndex = 0;
@@ -313,25 +315,62 @@ public class PianoKeyboard extends JComponent {
             if (!IS_BLACK[n % 12]) {
                 int kx = (int) (whiteIndex * whiteWidth);
                 int kw = (int) ((whiteIndex + 1) * whiteWidth) - kx;
+                boolean active = isNoteActive(n) || pressedNote == n;
 
-                if (isNoteActive(n) || pressedNote == n) {
-                    g2.setColor(Theme.ACCENT);
+                if (sw) {
+                    if (active) {
+                        g2.setColor(Theme.SW_CYAN);
+                        g2.fillRect(kx, 0, kw - 1, h - 1);
+                        // Glow effect for active keys
+                        SynthwavePainter.paintGlow(g2, kx, 0, kw - 1, h - 1, Theme.SW_CYAN, 3);
+                    } else {
+                        // Light purple-gray with subtle scanlines
+                        g2.setColor(Theme.ZINC_200);
+                        g2.fillRect(kx, 0, kw - 1, h - 1);
+                        // Subtle horizontal scanlines on key surface
+                        g2.setColor(new Color(Theme.SW_PURPLE.getRed(), Theme.SW_PURPLE.getGreen(),
+                                Theme.SW_PURPLE.getBlue(), 12));
+                        for (int sy = 3; sy < h; sy += 4) {
+                            g2.drawLine(kx, sy, kx + kw - 2, sy);
+                        }
+                    }
+                    // Bevel effect
+                    java.awt.Composite orig = g2.getComposite();
+                    g2.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, 0.3f));
+                    g2.setColor(Color.WHITE);
+                    g2.drawLine(kx + 1, 1, kx + kw - 3, 1); // top highlight
+                    g2.drawLine(kx + 1, 1, kx + 1, h - 3);  // left highlight
+                    g2.setColor(Color.BLACK);
+                    g2.drawLine(kx + 1, h - 2, kx + kw - 2, h - 2); // bottom shadow
+                    g2.setComposite(orig);
+                    // Thick pixel border
+                    g2.setColor(Theme.SW_PURPLE);
+                    g2.setStroke(new java.awt.BasicStroke(2f));
+                    g2.drawRect(kx, 0, kw - 1, h - 1);
                 } else {
-                    g2.setColor(Theme.ZINC_200);
+                    g2.setColor(active ? Theme.ACCENT : Theme.ZINC_200);
+                    g2.fillRect(kx, 0, kw - 1, h - 1);
+                    g2.setColor(Theme.BORDER);
+                    g2.drawRect(kx, 0, kw - 1, h - 1);
                 }
-                g2.fillRect(kx, 0, kw - 1, h - 1);
 
-                g2.setColor(Theme.BORDER);
-                g2.drawRect(kx, 0, kw - 1, h - 1);
-
-                // Draw note label at bottom of white key
+                // Note label
                 String label = noteName(n);
-                g2.setFont(Theme.FONT_BASE.deriveFont(9f));
-                FontMetrics fm = g2.getFontMetrics();
-                int tx = kx + (kw - fm.stringWidth(label)) / 2;
-                int ty = h - 4;
-                g2.setColor(Theme.ZINC_500);
-                g2.drawString(label, tx, ty);
+                if (sw) {
+                    g2.setFont(SynthwaveFonts.DISPLAY_SMALL);
+                    FontMetrics fm = g2.getFontMetrics();
+                    int tx = kx + (kw - fm.stringWidth(label)) / 2;
+                    int ty = h - 4;
+                    g2.setColor(active ? Theme.BG : Theme.SW_PURPLE);
+                    g2.drawString(label, tx, ty);
+                } else {
+                    g2.setFont(Theme.FONT_BASE.deriveFont(9f));
+                    FontMetrics fm = g2.getFontMetrics();
+                    int tx = kx + (kw - fm.stringWidth(label)) / 2;
+                    int ty = h - 4;
+                    g2.setColor(Theme.ZINC_500);
+                    g2.drawString(label, tx, ty);
+                }
 
                 whiteIndex++;
             }
@@ -343,16 +382,37 @@ public class PianoKeyboard extends JComponent {
             if (IS_BLACK[n % 12]) {
                 double bx = whiteIndex * whiteWidth - whiteWidth * 0.3;
                 double bw = whiteWidth * 0.6;
+                boolean active = isNoteActive(n) || pressedNote == n;
 
-                if (isNoteActive(n) || pressedNote == n) {
-                    g2.setColor(Theme.ACCENT);
+                if (sw) {
+                    if (active) {
+                        g2.setColor(Theme.SW_CYAN);
+                        g2.fillRect((int) bx, 0, (int) bw, blackHeight);
+                        SynthwavePainter.paintGlow(g2, (int) bx, 0, (int) bw, blackHeight, Theme.SW_CYAN, 3);
+                    } else {
+                        // Deep purple gradient
+                        java.awt.GradientPaint gp = new java.awt.GradientPaint(
+                                0, 0, Theme.SW_BG_RAISED,
+                                0, blackHeight, Theme.SW_BG_DEEP);
+                        g2.setPaint(gp);
+                        g2.fillRect((int) bx, 0, (int) bw, blackHeight);
+                    }
+                    // Bevel
+                    java.awt.Composite orig = g2.getComposite();
+                    g2.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, 0.12f));
+                    g2.setColor(Theme.SW_LAVENDER);
+                    g2.drawLine((int) bx + 1, 1, (int)(bx + bw) - 2, 1);
+                    g2.drawLine((int) bx + 1, 1, (int) bx + 1, blackHeight - 2);
+                    g2.setComposite(orig);
+                    g2.setColor(Theme.SW_PURPLE);
+                    g2.setStroke(new java.awt.BasicStroke(2f));
+                    g2.drawRect((int) bx, 0, (int) bw, blackHeight);
                 } else {
-                    g2.setColor(Theme.ZINC_900);
+                    g2.setColor(active ? Theme.ACCENT : Theme.ZINC_900);
+                    g2.fillRoundRect((int) bx, 0, (int) bw, blackHeight, 4, 4);
+                    g2.setColor(Theme.BORDER);
+                    g2.drawRoundRect((int) bx, 0, (int) bw, blackHeight, 4, 4);
                 }
-                g2.fillRoundRect((int) bx, 0, (int) bw, blackHeight, 4, 4);
-
-                g2.setColor(Theme.BORDER);
-                g2.drawRoundRect((int) bx, 0, (int) bw, blackHeight, 4, 4);
             } else {
                 whiteIndex++;
             }

@@ -44,15 +44,23 @@ public enum ThemePreset {
         6, 4, 10),
 
     NEON_OUTRUN("Synthwave",
-        c(240,230,255), c(220,210,240), c(180,170,210), c(140,130,175),
-        c(110,100,150), c(80,70,120), c(55,45,90), c(40,30,70),
-        c(25,18,50), c(16,10,38), c(10,4,26),
-        c(10,4,26), c(16,10,38), c(25,18,50), c(14,8,34),
-        c(50,30,90), c(35,22,65),
-        c(240,230,255), c(140,130,175), c(100,90,140),
-        c(255,41,117), c(255,80,150), c(255,41,117,35), c(255,41,117,35), c(255,41,117,80),
-        c(255,50,50), c(0,255,245), c(0,255,245,30), c(255,200,40), c(255,200,40,30),
+        /* ZINC 50-950: purple-tinted grayscale */
+        c(232,224,240), c(220,210,240), c(180,170,210), c(157,142,194),
+        c(123,94,167), c(93,74,137), c(59,42,122), c(45,27,105),
+        c(59,42,122), c(45,27,105), c(26,10,46),
+        /* BG, BG_CARD, BG_MUTED, BG_INPUT */
+        c(26,10,46), c(45,27,105), c(59,42,122), c(35,18,75),
+        /* BORDER, BORDER_SUBTLE */
+        c(123,94,167), c(93,74,137),
+        /* FG, FG_MUTED, FG_DIM */
+        c(232,224,240), c(157,142,194), c(123,94,167),
+        /* ACCENT, ACCENT_HOVER, ACCENT_MUTED, ACCENT_FILL, RING */
+        c(255,45,149), c(255,80,170), c(255,45,149,35), c(255,45,149,35), c(255,45,149,80),
+        /* DESTRUCTIVE, SUCCESS (cyan), SUCCESS_FILL, AMBER, AMBER_FILL */
+        c(239,68,68), c(34,211,238), c(34,211,238,30), c(251,191,36), c(251,191,36,30),
+        /* fonts: null = overridden in Theme.applyTheme() with SynthwaveFonts */
         null, null, null, null, null, null, null,
+        /* radii: -1 = keep defaults (pixel corners are handled by SynthwavePainter) */
         -1, -1, -1),
 
     CYAN("Cyan Glow",
@@ -65,6 +73,26 @@ public enum ThemePreset {
         c(0,210,220), c(50,235,245), c(0,210,220,30), c(0,210,220,30), c(0,210,220,80),
         c(239,68,68), c(34,220,160), c(34,220,160,30), c(245,190,50), c(245,190,50,30),
         null, null, null, null, null, null, null,
+        -1, -1, -1),
+
+    DAYLIGHT("Daylight",
+        /* ZINC 50-950: inverted — darks first (FG), lights last (BG) */
+        c(32,32,38), c(50,50,58), c(72,72,82), c(100,100,112),
+        c(130,130,142), c(158,158,168), c(188,188,196), c(208,208,214),
+        c(228,228,232), c(238,238,242), c(245,245,248),
+        /* BG, BG_CARD, BG_MUTED, BG_INPUT */
+        c(245,245,248), c(255,255,255), c(228,228,232), c(238,238,242),
+        /* BORDER, BORDER_SUBTLE */
+        c(208,208,214), c(222,222,228),
+        /* FG, FG_MUTED, FG_DIM */
+        c(32,32,38), c(100,100,112), c(158,158,168),
+        /* ACCENT, ACCENT_HOVER, ACCENT_MUTED, ACCENT_FILL, RING */
+        c(67,56,202), c(79,70,229), c(67,56,202,20), c(67,56,202,20), c(67,56,202,60),
+        /* DESTRUCTIVE, SUCCESS, SUCCESS_FILL, AMBER, AMBER_FILL */
+        c(220,38,38), c(22,163,74), c(22,163,74,20), c(217,119,6), c(217,119,6,20),
+        /* fonts */
+        null, null, null, null, null, null, null,
+        /* radii */
         -1, -1, -1),
 
     MODULAR("Eurorack Patching",

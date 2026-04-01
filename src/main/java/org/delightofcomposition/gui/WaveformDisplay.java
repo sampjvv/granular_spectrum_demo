@@ -45,12 +45,18 @@ public class WaveformDisplay extends JPanel {
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(Theme.BG_CARD);
-                g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
-                        Theme.RADIUS_LG, Theme.RADIUS_LG);
-                g2.setColor(Theme.BORDER);
-                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
-                        Theme.RADIUS_LG, Theme.RADIUS_LG);
+                if (Theme.isSynthwave()) {
+                    SynthwavePainter.fillPanel(g2, 0, 0, getWidth(), getHeight(),
+                            Theme.BG_CARD, Theme.BORDER);
+                    SynthwavePainter.paintBevel(g2, 0, 0, getWidth(), getHeight(), true);
+                } else {
+                    g2.setColor(Theme.BG_CARD);
+                    g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
+                            Theme.RADIUS_LG, Theme.RADIUS_LG);
+                    g2.setColor(Theme.BORDER);
+                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
+                            Theme.RADIUS_LG, Theme.RADIUS_LG);
+                }
                 g2.dispose();
             }
         };
@@ -206,8 +212,12 @@ public class WaveformDisplay extends JPanel {
             int h = getHeight();
 
             // Background
-            g2.setColor(Theme.BG_INPUT);
-            g2.fillRoundRect(0, 0, w - 1, h - 1, Theme.RADIUS, Theme.RADIUS);
+            if (Theme.isSynthwave()) {
+                SynthwavePainter.fillPanel(g2, 0, 0, w, h, Theme.BG_INPUT, Theme.SW_PURPLE);
+            } else {
+                g2.setColor(Theme.BG_INPUT);
+                g2.fillRoundRect(0, 0, w - 1, h - 1, Theme.RADIUS, Theme.RADIUS);
+            }
 
             if (stereoBuffer == null || stereoBuffer[0].length == 0) {
                 // Empty state
@@ -223,9 +233,13 @@ public class WaveformDisplay extends JPanel {
             }
 
             // Border
-            g2.setColor(Theme.BORDER_SUBTLE);
-            g2.setStroke(new BasicStroke(1));
-            g2.drawRoundRect(0, 0, w - 1, h - 1, Theme.RADIUS, Theme.RADIUS);
+            if (Theme.isSynthwave()) {
+                // Already drawn by fillPanel
+            } else {
+                g2.setColor(Theme.BORDER_SUBTLE);
+                g2.setStroke(new BasicStroke(1));
+                g2.drawRoundRect(0, 0, w - 1, h - 1, Theme.RADIUS, Theme.RADIUS);
+            }
 
             g2.dispose();
         }
@@ -235,11 +249,25 @@ public class WaveformDisplay extends JPanel {
             float[] right = stereoBuffer[1];
             int numSamples = left.length;
 
-            // Center line
-            g2.setColor(Theme.BORDER_SUBTLE);
+            if (Theme.isSynthwave()) {
+                // Grid overlay
+                g2.setColor(new Color(Theme.SW_CYAN.getRed(), Theme.SW_CYAN.getGreen(),
+                        Theme.SW_CYAN.getBlue(), 15));
+                for (int gy = h / 4; gy < h; gy += h / 4) {
+                    g2.drawLine(0, gy, w, gy);
+                }
+                for (int gx = w / 8; gx < w; gx += w / 8) {
+                    g2.drawLine(gx, 0, gx, h);
+                }
+                // Cyan center line
+                g2.setColor(new Color(Theme.SW_CYAN.getRed(), Theme.SW_CYAN.getGreen(),
+                        Theme.SW_CYAN.getBlue(), 60));
+            } else {
+                g2.setColor(Theme.BORDER_SUBTLE);
+            }
             g2.drawLine(0, h / 2, w, h / 2);
 
-            // Draw waveform: for each pixel column, find min/max in sample range
+            // Draw waveform
             g2.setColor(Theme.ACCENT);
             g2.setStroke(new BasicStroke(1));
 

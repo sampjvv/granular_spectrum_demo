@@ -31,9 +31,11 @@ public class LabeledSlider extends JPanel {
 
     private static final int TRACK_H = 6;
     private static final int THUMB_SIZE = 18;
-    private static final int SLIDER_AREA_H = 30;
-    private static final int HEADER_H = 18;
     private static final int GAP = 4;
+
+    private static int headerH() { return Theme.isSynthwave() ? 26 : 18; }
+    private static int sliderAreaH() { return Theme.isSynthwave() ? 34 : 30; }
+    private static int totalH() { return headerH() + GAP + sliderAreaH(); }
 
     private int value;
     private final int min;
@@ -56,7 +58,7 @@ public class LabeledSlider extends JPanel {
         JPanel header = new JPanel();
         header.setLayout(new BoxLayout(header, BoxLayout.X_AXIS));
         header.setOpaque(false);
-        header.setMaximumSize(new Dimension(Integer.MAX_VALUE, HEADER_H));
+        header.setMaximumSize(new Dimension(Integer.MAX_VALUE, headerH()));
 
         JLabel nameLabel = Theme.paramLabel(label);
         nameLabel.setAlignmentY(0.5f);
@@ -75,12 +77,12 @@ public class LabeledSlider extends JPanel {
 
     @Override
     public Dimension getPreferredSize() {
-        return new Dimension(200, HEADER_H + GAP + SLIDER_AREA_H);
+        return new Dimension(200, totalH());
     }
 
     @Override
     public Dimension getMaximumSize() {
-        return new Dimension(Integer.MAX_VALUE, HEADER_H + GAP + SLIDER_AREA_H);
+        return new Dimension(Integer.MAX_VALUE, totalH());
     }
 
     public int getValue() {
@@ -126,8 +128,8 @@ public class LabeledSlider extends JPanel {
 
         SliderTrack() {
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            setPreferredSize(new Dimension(200, SLIDER_AREA_H));
-            setMaximumSize(new Dimension(Integer.MAX_VALUE, SLIDER_AREA_H));
+            setPreferredSize(new Dimension(200, sliderAreaH()));
+            setMaximumSize(new Dimension(Integer.MAX_VALUE, sliderAreaH()));
             setFocusable(true);
 
             addMouseListener(new MouseAdapter() {
@@ -177,40 +179,57 @@ public class LabeledSlider extends JPanel {
             int padX = THUMB_SIZE / 2;
             int trackW = w - THUMB_SIZE;
             int trackY = (h - TRACK_H) / 2;
-
-            // Track background
-            g2.setColor(Theme.BG_MUTED);
-            g2.fillRoundRect(padX, trackY, trackW, TRACK_H, TRACK_H, TRACK_H);
-
-            // Filled portion
             float frac = getFraction();
             int fillW = (int) (frac * trackW);
-            if (fillW > 0) {
+
+            if (Theme.isSynthwave()) {
+                // Rectangular track with pixel-art styling
+                SynthwavePainter.fillPanel(g2, padX, trackY, trackW, TRACK_H,
+                        Theme.BG_MUTED, Theme.SW_PURPLE);
+
+                // Accent fill with glow
+                if (fillW > 2) {
+                    g2.setColor(Theme.ACCENT);
+                    g2.fillRect(padX + 1, trackY + 1, fillW - 1, TRACK_H - 2);
+                    SynthwavePainter.paintGlow(g2, padX, trackY, fillW, TRACK_H, Theme.ACCENT, 2);
+                }
+
+                // Square thumb with pixel corners
+                int thumbX = padX + fillW - THUMB_SIZE / 2;
+                int thumbY = (h - THUMB_SIZE) / 2;
+                SynthwavePainter.fillPanel(g2, thumbX, thumbY, THUMB_SIZE, THUMB_SIZE,
+                        Theme.SW_LAVENDER, Theme.SW_PURPLE);
+                SynthwavePainter.paintBevel(g2, thumbX, thumbY, THUMB_SIZE, THUMB_SIZE, true);
+            } else {
+                // Standard rounded track
+                g2.setColor(Theme.BG_MUTED);
+                g2.fillRoundRect(padX, trackY, trackW, TRACK_H, TRACK_H, TRACK_H);
+
+                if (fillW > 0) {
+                    g2.setColor(Theme.ACCENT);
+                    g2.fillRoundRect(padX, trackY, fillW, TRACK_H, TRACK_H, TRACK_H);
+                }
+
+                // Circular thumb
+                int thumbX = padX + fillW - THUMB_SIZE / 2;
+                int thumbY = (h - THUMB_SIZE) / 2;
+                g2.setColor(Theme.SHADOW);
+                g2.fillOval(thumbX + 1, thumbY + 1, THUMB_SIZE, THUMB_SIZE);
+                g2.setColor(Theme.THUMB);
+                g2.fillOval(thumbX, thumbY, THUMB_SIZE, THUMB_SIZE);
                 g2.setColor(Theme.ACCENT);
-                g2.fillRoundRect(padX, trackY, fillW, TRACK_H, TRACK_H, TRACK_H);
+                g2.drawOval(thumbX, thumbY, THUMB_SIZE - 1, THUMB_SIZE - 1);
             }
 
-            // Thumb
-            int thumbX = padX + (int) (frac * trackW) - THUMB_SIZE / 2;
-            int thumbY = (h - THUMB_SIZE) / 2;
-
-            // Shadow
-            g2.setColor(Theme.SHADOW);
-            g2.fillOval(thumbX + 1, thumbY + 1, THUMB_SIZE, THUMB_SIZE);
-
-            // Thumb fill
-            g2.setColor(Theme.THUMB);
-            g2.fillOval(thumbX, thumbY, THUMB_SIZE, THUMB_SIZE);
-
-            // Accent border
-            g2.setColor(Theme.ACCENT);
-            g2.drawOval(thumbX, thumbY, THUMB_SIZE - 1, THUMB_SIZE - 1);
-
             // Focus ring
-            if (isFocusOwner()) {
+            if (isFocusOwner() && !Theme.isSynthwave()) {
                 g2.setColor(Theme.RING);
                 g2.setStroke(new BasicStroke(2f));
-                g2.drawRoundRect(1, 1, w - 3, h - 3, h, h);
+                if (Theme.isSynthwave()) {
+                    SynthwavePainter.strokeShape(g2, 1, 1, w - 2, h - 2, Theme.RING);
+                } else {
+                    g2.drawRoundRect(1, 1, w - 3, h - 3, h, h);
+                }
             }
 
             g2.dispose();

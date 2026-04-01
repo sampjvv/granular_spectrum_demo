@@ -173,6 +173,12 @@ public class MainWindow extends JFrame {
                 System.exit(0);
             }
         });
+
+        // Set up CRT scanline overlay if synthwave theme is active at startup
+        if (Theme.isSynthwave()) {
+            setGlassPane(new SynthwaveScanlinePane());
+            getGlassPane().setVisible(true);
+        }
     }
 
     private void buildMenuBar() {
@@ -218,7 +224,20 @@ public class MainWindow extends JFrame {
             item.setSelected(preset == Theme.getPreset());
             item.addActionListener(e -> {
                 Theme.applyTheme(preset);
+                Theme.resetExplicitProperties(getContentPane());
+                if (getJMenuBar() != null) {
+                    Theme.resetExplicitProperties(getJMenuBar());
+                    // Also reset popup menus (not part of the JMenuBar component tree)
+                    for (int mi = 0; mi < getJMenuBar().getMenuCount(); mi++) {
+                        javax.swing.JMenu menu = getJMenuBar().getMenu(mi);
+                        if (menu != null) {
+                            Theme.resetExplicitProperties(menu.getPopupMenu());
+                        }
+                    }
+                }
                 SwingUtilities.updateComponentTreeUI(this);
+                Theme.refreshTaggedProperties(getContentPane());
+                refreshMenuBar();
                 refreshBackgrounds();
                 repaint();
                 ThemePreferences.save(preset);
@@ -244,6 +263,48 @@ public class MainWindow extends JFrame {
         setJMenuBar(menuBar);
     }
 
+    /** Force-refresh the menu bar after a theme switch. */
+    private void refreshMenuBar() {
+        javax.swing.JMenuBar mb = getJMenuBar();
+        if (mb == null) return;
+        mb.setBackground(Theme.BG_CARD);
+        mb.setForeground(Theme.FG);
+        mb.setFont(Theme.FONT_BASE);
+        mb.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, Theme.BORDER));
+        for (int i = 0; i < mb.getMenuCount(); i++) {
+            javax.swing.JMenu menu = mb.getMenu(i);
+            if (menu == null) continue;
+            menu.setBackground(Theme.BG_CARD);
+            menu.setForeground(Theme.FG);
+            menu.setFont(Theme.FONT_BASE);
+            // Also refresh popup menu items
+            javax.swing.JPopupMenu popup = menu.getPopupMenu();
+            popup.setBackground(Theme.BG_CARD);
+            popup.setForeground(Theme.FG);
+            for (java.awt.Component mc : popup.getComponents()) {
+                if (mc instanceof javax.swing.JComponent) {
+                    ((javax.swing.JComponent) mc).setBackground(Theme.BG_CARD);
+                    ((javax.swing.JComponent) mc).setForeground(Theme.FG);
+                    ((javax.swing.JComponent) mc).setFont(Theme.FONT_BASE);
+                }
+                // Recurse into submenus (like the Theme submenu)
+                if (mc instanceof javax.swing.JMenu) {
+                    javax.swing.JMenu sub = (javax.swing.JMenu) mc;
+                    javax.swing.JPopupMenu subPop = sub.getPopupMenu();
+                    subPop.setBackground(Theme.BG_CARD);
+                    subPop.setForeground(Theme.FG);
+                    for (java.awt.Component sc : subPop.getComponents()) {
+                        if (sc instanceof javax.swing.JComponent) {
+                            ((javax.swing.JComponent) sc).setBackground(Theme.BG_CARD);
+                            ((javax.swing.JComponent) sc).setForeground(Theme.FG);
+                            ((javax.swing.JComponent) sc).setFont(Theme.FONT_BASE);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /** Re-apply themed backgrounds after a theme switch. */
     private void refreshBackgrounds() {
         getContentPane().setBackground(Theme.BG);
@@ -252,6 +313,21 @@ public class MainWindow extends JFrame {
         clearSplitPaneOpacity(wavSplit);
         clearSplitPaneOpacity(rightSplit);
         clearSplitPaneOpacity(liveSplit);
+
+        // Toggle CRT scanline overlay
+        if (Theme.isSynthwave()) {
+            if (!(getGlassPane() instanceof SynthwaveScanlinePane)) {
+                setGlassPane(new SynthwaveScanlinePane());
+            }
+            getGlassPane().setVisible(true);
+        } else {
+            if (getGlassPane() instanceof SynthwaveScanlinePane) {
+                getGlassPane().setVisible(false);
+            }
+        }
+
+        // Revalidate for font metric changes
+        getContentPane().revalidate();
     }
 
     /**
@@ -333,7 +409,8 @@ public class MainWindow extends JFrame {
         wavToolbar.add(helpBtn);
 
         wavToolbar.add(Box.createHorizontalStrut(12));
-        progressBar.setPreferredSize(new Dimension(300, 20));
+        progressBar.setPreferredSize(new Dimension(150, 20));
+        progressBar.setMinimumSize(new Dimension(80, 20));
         wavToolbar.add(progressBar);
 
         toolbarCards.add(wavToolbar, WAV_MODE);
@@ -438,6 +515,7 @@ public class MainWindow extends JFrame {
 
         JPanel envelopeWrapper = new JPanel(new BorderLayout(0, 4));
         envelopeWrapper.setOpaque(false);
+        envelopeWrapper.setBorder(BorderFactory.createEmptyBorder(8, 8, 0, 8));
         envelopeWrapper.add(regionSelector, BorderLayout.NORTH);
         envelopeWrapper.add(envelopeScroll, BorderLayout.CENTER);
 

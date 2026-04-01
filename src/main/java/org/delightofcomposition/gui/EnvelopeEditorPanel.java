@@ -54,7 +54,8 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
         densityCanvas = new EnvelopeCanvas(densityEnvelope, () -> Theme.ACCENT);
         mixCanvas = new EnvelopeCanvas(mixEnvelope, () -> Theme.SUCCESS);
         dynamicsCanvas = new EnvelopeCanvas(dynamicsEnvelope, () -> Theme.AMBER, true);
-        pitchCanvas = new EnvelopeCanvas(pitchEnvelope, () -> Theme.DESTRUCTIVE, false, true);
+        pitchCanvas = new EnvelopeCanvas(pitchEnvelope,
+                () -> Theme.isSynthwave() ? Theme.SW_GREEN : Theme.DESTRUCTIVE, false, true);
 
         // Dynamics toggle
         dynamicsToggle = new ToggleSwitch(params.useDynamicsEnv);
@@ -133,12 +134,18 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(Theme.BG_CARD);
-                g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
-                        Theme.RADIUS_LG, Theme.RADIUS_LG);
-                g2.setColor(Theme.BORDER);
-                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
-                        Theme.RADIUS_LG, Theme.RADIUS_LG);
+                if (Theme.isSynthwave()) {
+                    SynthwavePainter.fillPanel(g2, 0, 0, getWidth(), getHeight(),
+                            Theme.BG_CARD, Theme.BORDER);
+                    SynthwavePainter.paintBevel(g2, 0, 0, getWidth(), getHeight(), true);
+                } else {
+                    g2.setColor(Theme.BG_CARD);
+                    g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
+                            Theme.RADIUS_LG, Theme.RADIUS_LG);
+                    g2.setColor(Theme.BORDER);
+                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
+                            Theme.RADIUS_LG, Theme.RADIUS_LG);
+                }
                 g2.dispose();
             }
         };
@@ -161,23 +168,23 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
         titleArea.add(titleRow, BorderLayout.NORTH);
 
         JLabel helpLabel = new JLabel(helpText);
-        helpLabel.setFont(Theme.FONT_SMALL);
-        helpLabel.setForeground(Theme.FG_DIM);
+        Theme.tagFont(helpLabel, "small");
+        Theme.tagFg(helpLabel, "fgDim");
         titleArea.add(helpLabel, BorderLayout.SOUTH);
         header.add(titleArea, BorderLayout.CENTER);
 
         // Button bar
-        JPanel buttonBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+        JPanel buttonBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 1, 0));
         buttonBar.setOpaque(false);
 
         JButton resetBtn = Theme.ghostButton("Reset");
-        resetBtn.setFont(Theme.FONT_SMALL);
-        resetBtn.setPreferredSize(new Dimension(60, 26));
+        Theme.tagFont(resetBtn, "small");
+        resetBtn.setPreferredSize(new Dimension(75, 26));
         resetBtn.addActionListener(e -> canvas.reset());
 
         JButton undoBtn = Theme.ghostButton("Undo");
-        undoBtn.setFont(Theme.FONT_SMALL);
-        undoBtn.setPreferredSize(new Dimension(60, 26));
+        Theme.tagFont(undoBtn, "small");
+        undoBtn.setPreferredSize(new Dimension(70, 26));
         undoBtn.setEnabled(false);
         undoBtn.addActionListener(e -> {
             canvas.undo();
@@ -200,12 +207,17 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(Theme.BG_INPUT);
-                g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
-                        Theme.RADIUS, Theme.RADIUS);
-                g2.setColor(Theme.BORDER_SUBTLE);
-                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
-                        Theme.RADIUS, Theme.RADIUS);
+                if (Theme.isSynthwave()) {
+                    SynthwavePainter.fillPanel(g2, 0, 0, getWidth(), getHeight(),
+                            Theme.BG_INPUT, Theme.BORDER_SUBTLE);
+                } else {
+                    g2.setColor(Theme.BG_INPUT);
+                    g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
+                            Theme.RADIUS, Theme.RADIUS);
+                    g2.setColor(Theme.BORDER_SUBTLE);
+                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
+                            Theme.RADIUS, Theme.RADIUS);
+                }
                 g2.dispose();
             }
         };

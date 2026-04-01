@@ -155,10 +155,14 @@ public class SourceRegionSelector extends JComponent {
         int h = getHeight();
 
         // Background card
-        g2.setColor(Theme.BG_CARD);
-        g2.fillRoundRect(0, 0, w - 1, h - 1, Theme.RADIUS, Theme.RADIUS);
-        g2.setColor(Theme.BORDER_SUBTLE);
-        g2.drawRoundRect(0, 0, w - 1, h - 1, Theme.RADIUS, Theme.RADIUS);
+        if (Theme.isSynthwave()) {
+            SynthwavePainter.fillPanel(g2, 0, 0, w, h, Theme.BG_CARD, Theme.BORDER_SUBTLE);
+        } else {
+            g2.setColor(Theme.BG_CARD);
+            g2.fillRoundRect(0, 0, w - 1, h - 1, Theme.RADIUS, Theme.RADIUS);
+            g2.setColor(Theme.BORDER_SUBTLE);
+            g2.drawRoundRect(0, 0, w - 1, h - 1, Theme.RADIUS, Theme.RADIUS);
+        }
 
         if (waveformData == null || waveformData.length == 0) {
             g2.setFont(Theme.FONT_SMALL);
@@ -213,8 +217,13 @@ public class SourceRegionSelector extends JComponent {
         g2.fillRect(endX - 1, 0, 2, h);
 
         // Marker handles (small rectangles at top)
-        g2.fillRoundRect(startX - HANDLE_W / 2, 0, HANDLE_W, 14, 4, 4);
-        g2.fillRoundRect(endX - HANDLE_W / 2, 0, HANDLE_W, 14, 4, 4);
+        if (Theme.isSynthwave()) {
+            SynthwavePainter.fillShape(g2, startX - HANDLE_W / 2, 0, HANDLE_W, 14, Theme.ACCENT);
+            SynthwavePainter.fillShape(g2, endX - HANDLE_W / 2, 0, HANDLE_W, 14, Theme.ACCENT);
+        } else {
+            g2.fillRoundRect(startX - HANDLE_W / 2, 0, HANDLE_W, 14, 4, 4);
+            g2.fillRoundRect(endX - HANDLE_W / 2, 0, HANDLE_W, 14, 4, 4);
+        }
 
         // Duration labels
         g2.setFont(Theme.FONT_SMALL);
@@ -244,10 +253,14 @@ public class SourceRegionSelector extends JComponent {
         g2.drawString(outStr, w - fm.stringWidth(outStr) - LABEL_PAD, fm.getAscent() + 2);
 
         // Focus ring
-        if (isFocusOwner()) {
-            g2.setColor(Theme.RING);
-            g2.setStroke(new BasicStroke(2f));
-            g2.drawRoundRect(1, 1, w - 3, h - 3, Theme.RADIUS, Theme.RADIUS);
+        if (isFocusOwner() && !Theme.isSynthwave()) {
+            if (Theme.isSynthwave()) {
+                SynthwavePainter.strokeShape(g2, 1, 1, w - 2, h - 2, Theme.RING);
+            } else {
+                g2.setColor(Theme.RING);
+                g2.setStroke(new BasicStroke(2f));
+                g2.drawRoundRect(1, 1, w - 3, h - 3, Theme.RADIUS, Theme.RADIUS);
+            }
         }
 
         g2.dispose();

@@ -29,7 +29,7 @@ import org.delightofcomposition.sound.AudioPlayer;
  */
 public class LibraryPanel extends JPanel {
 
-    private static final int WIDTH = 260;
+    private static final int WIDTH = 290;
     private static final SimpleDateFormat DATE_FMT = new SimpleDateFormat("MMM d, yyyy  h:mm a");
 
     private final AudioPlayer libraryPlayer = new AudioPlayer();
@@ -58,8 +58,8 @@ public class LibraryPanel extends JPanel {
         header.add(Theme.sectionLabel("Library"), BorderLayout.WEST);
 
         JButton openFolderBtn = Theme.ghostButton("Open Folder");
-        openFolderBtn.setFont(Theme.FONT_SMALL);
-        openFolderBtn.setPreferredSize(new Dimension(85, 24));
+        Theme.tagFont(openFolderBtn, "small");
+        openFolderBtn.setPreferredSize(new Dimension(95, 26));
         openFolderBtn.addActionListener(e -> {
             try {
                 Desktop.getDesktop().open(SoundLibrary.getLibraryRoot());
@@ -88,7 +88,7 @@ public class LibraryPanel extends JPanel {
         // Tab switch
         tabSwitch = new SegmentedControl(new String[]{"Renders", "Live Presets"}, 0);
         tabSwitch.addChangeListener(e -> refresh());
-        tabSwitch.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
+        tabSwitch.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
         add(tabSwitch, BorderLayout.SOUTH);
 
         refresh();
@@ -104,8 +104,8 @@ public class LibraryPanel extends JPanel {
 
         if (entries.isEmpty()) {
             JLabel empty = new JLabel(showRenders ? "No saved renders" : "No saved presets");
-            empty.setFont(Theme.FONT_SMALL);
-            empty.setForeground(Theme.FG_DIM);
+            Theme.tagFont(empty, "small");
+            Theme.tagFg(empty, "fgDim");
             empty.setAlignmentX(0.5f);
             empty.setBorder(BorderFactory.createEmptyBorder(20, 0, 0, 0));
             listPanel.add(empty);
@@ -127,12 +127,17 @@ public class LibraryPanel extends JPanel {
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(Theme.BG_CARD);
-                g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
-                        Theme.RADIUS, Theme.RADIUS);
-                g2.setColor(Theme.BORDER_SUBTLE);
-                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
-                        Theme.RADIUS, Theme.RADIUS);
+                if (Theme.isSynthwave()) {
+                    SynthwavePainter.fillPanel(g2, 0, 0, getWidth(), getHeight(),
+                            Theme.BG_CARD, Theme.BORDER_SUBTLE);
+                } else {
+                    g2.setColor(Theme.BG_CARD);
+                    g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
+                            Theme.RADIUS, Theme.RADIUS);
+                    g2.setColor(Theme.BORDER_SUBTLE);
+                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
+                            Theme.RADIUS, Theme.RADIUS);
+                }
                 g2.dispose();
             }
         };
@@ -145,15 +150,17 @@ public class LibraryPanel extends JPanel {
         info.setOpaque(false);
 
         JLabel nameLabel = new JLabel(entry.displayName);
-        nameLabel.setFont(Theme.FONT_BASE);
-        nameLabel.setForeground(Theme.FG);
+        Theme.tagFont(nameLabel, "small");
+        Theme.tagFg(nameLabel, "fg");
         nameLabel.setAlignmentX(0);
         nameLabel.setToolTipText(entry.displayName);
+        // Constrain width so text truncates instead of overflowing
+        nameLabel.setMaximumSize(new Dimension(WIDTH - 40, Short.MAX_VALUE));
         info.add(nameLabel);
 
         JLabel dateLabel = new JLabel(DATE_FMT.format(new Date(entry.dateMillis)));
-        dateLabel.setFont(Theme.FONT_SMALL);
-        dateLabel.setForeground(Theme.FG_DIM);
+        Theme.tagFont(dateLabel, "small");
+        Theme.tagFg(dateLabel, "fgDim");
         dateLabel.setAlignmentX(0);
         info.add(dateLabel);
 
@@ -169,8 +176,8 @@ public class LibraryPanel extends JPanel {
 
         if (isRender && entry.wavFile != null) {
             JButton playBtn = Theme.ghostButton("Play");
-            playBtn.setFont(Theme.FONT_SMALL);
-            playBtn.setPreferredSize(new Dimension(46, 22));
+            Theme.tagFont(playBtn, "small");
+            playBtn.setPreferredSize(new Dimension(50, 24));
             playBtn.addActionListener(e -> {
                 if (libraryPlayer.isPlaying() && currentPlayBtn == playBtn) {
                     libraryPlayer.stop();
@@ -195,15 +202,15 @@ public class LibraryPanel extends JPanel {
 
         if (entry.propertiesFile != null && entry.propertiesFile.exists()) {
             JButton loadBtn = Theme.ghostButton("Load");
-            loadBtn.setFont(Theme.FONT_SMALL);
-            loadBtn.setPreferredSize(new Dimension(46, 22));
+            Theme.tagFont(loadBtn, "small");
+            loadBtn.setPreferredSize(new Dimension(50, 24));
             loadBtn.addActionListener(e -> callback.onLoadPreset(entry.propertiesFile));
             topRow.add(loadBtn);
         }
 
         JButton updateBtn = Theme.ghostButton("Update");
-        updateBtn.setFont(Theme.FONT_SMALL);
-        updateBtn.setPreferredSize(new Dimension(55, 22));
+        Theme.tagFont(updateBtn, "small");
+        updateBtn.setPreferredSize(new Dimension(60, 24));
         updateBtn.setToolTipText("Overwrite with current settings" + (isRender ? " and render" : ""));
         updateBtn.addActionListener(e -> {
             int confirm = JOptionPane.showConfirmDialog(this,
@@ -222,8 +229,8 @@ public class LibraryPanel extends JPanel {
         bottomRow.setOpaque(false);
 
         JButton renameBtn = Theme.ghostButton("Rename");
-        renameBtn.setFont(Theme.FONT_SMALL);
-        renameBtn.setPreferredSize(new Dimension(60, 22));
+        Theme.tagFont(renameBtn, "small");
+        renameBtn.setPreferredSize(new Dimension(65, 24));
         renameBtn.addActionListener(e -> {
             String newName = JOptionPane.showInputDialog(this, "New name:", entry.displayName);
             if (newName != null && !newName.trim().isEmpty()) {
@@ -234,9 +241,9 @@ public class LibraryPanel extends JPanel {
         bottomRow.add(renameBtn);
 
         JButton delBtn = Theme.ghostButton("Del");
-        delBtn.setFont(Theme.FONT_SMALL);
-        delBtn.setForeground(Theme.DESTRUCTIVE);
-        delBtn.setPreferredSize(new Dimension(40, 22));
+        Theme.tagFont(delBtn, "small");
+        Theme.tagFg(delBtn, "destructive");
+        delBtn.setPreferredSize(new Dimension(55, 24));
         delBtn.addActionListener(e -> {
             int confirm = JOptionPane.showConfirmDialog(this,
                     "Delete \"" + entry.displayName + "\"?",

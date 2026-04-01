@@ -52,8 +52,12 @@ public class RadixToolTipUI extends BasicToolTipUI {
         ag.dispose();
 
         // Draw body on top (covers upper half of arrow)
-        g2.setColor(Theme.ZINC_950);
-        g2.fill(new RoundRectangle2D.Float(0, 0, w, bodyH, ARC, ARC));
+        if (Theme.isSynthwave()) {
+            SynthwavePainter.fillPanel(g2, 0, 0, w, bodyH, Theme.ZINC_950, Theme.SW_CYAN);
+        } else {
+            g2.setColor(Theme.ZINC_950);
+            g2.fill(new RoundRectangle2D.Float(0, 0, w, bodyH, ARC, ARC));
+        }
 
         // Text
         String text = ((javax.swing.JToolTip) c).getTipText();

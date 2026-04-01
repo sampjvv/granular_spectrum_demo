@@ -3,6 +3,7 @@ package org.delightofcomposition.gui;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.GradientPaint;
@@ -116,8 +117,26 @@ public class Theme {
     private static final int DEF_RADIUS_SM = 6;
     private static final int DEF_RADIUS_LG = 12;
 
+    // ── Synthwave-specific colors (null when not synthwave) ──
+    public static Color SW_CYAN      = null;
+    public static Color SW_CYAN_DIM  = null;
+    public static Color SW_GREEN     = null;
+    public static Color SW_YELLOW    = null;
+    public static Color SW_RED       = null;
+    public static Color SW_PURPLE    = null;
+    public static Color SW_LAVENDER  = null;
+    public static Color SW_HOT_PINK  = null;
+    public static Color SW_BG_DEEP   = null;
+    public static Color SW_BG_SURFACE = null;
+    public static Color SW_BG_RAISED = null;
+
     // ── Current preset tracking ──
     private static ThemePreset currentPreset = ThemePreset.DEFAULT_DARK;
+
+    /** Returns true when the active theme is the Synthwave (NEON_OUTRUN) preset. */
+    public static boolean isSynthwave() {
+        return currentPreset == ThemePreset.NEON_OUTRUN;
+    }
 
     /**
      * Apply a theme preset: overwrites all mutable static fields, then calls
@@ -172,6 +191,35 @@ public class Theme {
         RADIUS    = preset.radius    >= 0 ? preset.radius    : DEF_RADIUS;
         RADIUS_SM = preset.radiusSm  >= 0 ? preset.radiusSm  : DEF_RADIUS_SM;
         RADIUS_LG = preset.radiusLg  >= 0 ? preset.radiusLg  : DEF_RADIUS_LG;
+
+        // Synthwave-specific overrides
+        if (isSynthwave()) {
+            SynthwaveFonts.ensureLoaded();
+            FONT_BASE    = SynthwaveFonts.BODY;
+            FONT_SMALL   = SynthwaveFonts.BODY_SMALL;
+            FONT_LABEL   = SynthwaveFonts.UI_SMALL;
+            FONT_HEADING = SynthwaveFonts.DISPLAY;
+            FONT_TITLE   = SynthwaveFonts.DISPLAY_SMALL;
+            FONT_VALUE   = SynthwaveFonts.UI;
+            FONT_SECTION = SynthwaveFonts.DISPLAY_SMALL;
+            FONT_MONO    = SynthwaveFonts.UI;
+
+            SW_CYAN      = new Color(34, 211, 238);
+            SW_CYAN_DIM  = new Color(14, 116, 144);
+            SW_GREEN     = new Color(74, 222, 128);
+            SW_YELLOW    = new Color(251, 191, 36);
+            SW_RED       = new Color(239, 68, 68);
+            SW_PURPLE    = new Color(123, 94, 167);
+            SW_LAVENDER  = new Color(183, 148, 246);
+            SW_HOT_PINK  = new Color(255, 45, 149);
+            SW_BG_DEEP   = new Color(26, 10, 46);
+            SW_BG_SURFACE = new Color(59, 42, 122);
+            SW_BG_RAISED = new Color(74, 54, 153);
+        } else {
+            SW_CYAN = SW_CYAN_DIM = SW_GREEN = SW_YELLOW = SW_RED = null;
+            SW_PURPLE = SW_LAVENDER = SW_HOT_PINK = null;
+            SW_BG_DEEP = SW_BG_SURFACE = SW_BG_RAISED = null;
+        }
 
         install();
     }
@@ -338,8 +386,8 @@ public class Theme {
      * A rounded-corner border with configurable color, radius, and padding.
      */
     public static class RoundedBorder extends AbstractBorder {
-        private final Color color;
-        private final int radius;
+        private final Color color;  // null = use Theme.BORDER dynamically
+        private final int radius;   // -1 = use Theme.RADIUS_SM dynamically
         private final Insets insets;
 
         public RoundedBorder(Color color, int radius, Insets insets) {
@@ -350,10 +398,23 @@ public class Theme {
 
         @Override
         public void paintBorder(Component c, Graphics g, int x, int y, int w, int h) {
+            Color borderColor = color != null ? color : BORDER;
+            int r = radius >= 0 ? radius : RADIUS_SM;
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setColor(color);
-            g2.drawRoundRect(x, y, w - 1, h - 1, radius, radius);
+            if (isSynthwave()) {
+                SynthwavePainter.CornerSize sz = SynthwavePainter.chooseSizeForDimensions(w, h);
+                java.awt.Polygon outer = SynthwavePainter.pixelCornerShape(x, y, w, h, sz);
+                java.awt.Polygon inner = SynthwavePainter.pixelCornerShapeInset(x, y, w, h, sz,
+                        SynthwavePainter.BORDER_WIDTH);
+                java.awt.geom.Area borderRing = new java.awt.geom.Area(outer);
+                borderRing.subtract(new java.awt.geom.Area(inner));
+                g2.setColor(borderColor);
+                g2.fill(borderRing);
+            } else {
+                g2.setColor(borderColor);
+                g2.drawRoundRect(x, y, w - 1, h - 1, r, r);
+            }
             g2.dispose();
         }
 
@@ -368,6 +429,21 @@ public class Theme {
             i.right = insets.right; i.bottom = insets.bottom;
             return i;
         }
+    }
+
+    /**
+     * Walk up the component hierarchy to find the first opaque ancestor's
+     * background color. Falls back to Theme.BG if none found.
+     */
+    private static Color findOpaqueAncestorBg(Component c) {
+        java.awt.Container parent = c.getParent();
+        while (parent != null) {
+            if (parent.isOpaque() && parent.getBackground() != null) {
+                return parent.getBackground();
+            }
+            parent = parent.getParent();
+        }
+        return BG;
     }
 
     /**
@@ -394,10 +470,15 @@ public class Theme {
         public void paintBorder(Component c, Graphics g, int x, int y, int w, int h) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setColor(bg);
-            g2.fillRoundRect(x, y, w - 1, h - 1, radius, radius);
-            g2.setColor(border);
-            g2.drawRoundRect(x, y, w - 1, h - 1, radius, radius);
+            if (isSynthwave()) {
+                SynthwavePainter.fillPanel(g2, x, y, w, h, bg, border);
+                SynthwavePainter.paintBevel(g2, x, y, w, h, true);
+            } else {
+                g2.setColor(bg);
+                g2.fillRoundRect(x, y, w - 1, h - 1, radius, radius);
+                g2.setColor(border);
+                g2.drawRoundRect(x, y, w - 1, h - 1, radius, radius);
+            }
             g2.dispose();
         }
 
@@ -411,6 +492,119 @@ public class Theme {
             i.left = insets.left; i.top = insets.top;
             i.right = insets.right; i.bottom = insets.bottom;
             return i;
+        }
+    }
+
+    // ── Theme property tagging ──
+    // Components tagged with these client properties survive theme switches:
+    // the recursive walker re-applies current theme values from the tag.
+
+    /** Tag a component's font so it survives theme switches. */
+    public static void tagFont(JComponent c, String tag) {
+        c.putClientProperty("theme.font", tag);
+        c.setFont(resolveFont(tag));
+    }
+
+    /** Tag a component's foreground color so it survives theme switches. */
+    public static void tagFg(JComponent c, String tag) {
+        c.putClientProperty("theme.fg", tag);
+        c.setForeground(resolveFg(tag));
+    }
+
+    /** Tag a component's background color so it survives theme switches. */
+    public static void tagBg(JComponent c, String tag) {
+        c.putClientProperty("theme.bg", tag);
+        c.setBackground(resolveBg(tag));
+    }
+
+    private static Font resolveFont(String tag) {
+        switch (tag) {
+            case "base":    return FONT_BASE;
+            case "small":   return FONT_SMALL;
+            case "label":   return FONT_LABEL;
+            case "heading": return FONT_HEADING;
+            case "title":   return FONT_TITLE;
+            case "mono":    return FONT_MONO;
+            case "value":   return FONT_VALUE;
+            case "section": return FONT_SECTION;
+            default:        return FONT_BASE;
+        }
+    }
+
+    private static Color resolveFg(String tag) {
+        switch (tag) {
+            case "fg":          return FG;
+            case "fgMuted":     return FG_MUTED;
+            case "fgDim":       return FG_DIM;
+            case "bg":          return BG;
+            case "sectionFg":   return isSynthwave() ? FG : FG_MUTED;
+            case "destructive": return DESTRUCTIVE;
+            case "success":     return SUCCESS;
+            case "amber":       return AMBER;
+            case "accent":      return ACCENT;
+            default:            return FG;
+        }
+    }
+
+    private static Color resolveBg(String tag) {
+        switch (tag) {
+            case "bg":      return BG;
+            case "bgCard":  return BG_CARD;
+            case "bgMuted": return BG_MUTED;
+            case "bgInput": return BG_INPUT;
+            default:        return BG;
+        }
+    }
+
+    /** Null out ALL explicit font/fg/bg so UIManager defaults take over. */
+    public static void resetExplicitProperties(Container root) {
+        // Process root itself
+        if (root instanceof JComponent) {
+            JComponent jc = (JComponent) root;
+            jc.setFont(null);
+            jc.setForeground(null);
+            jc.setBackground(null);
+        }
+        // Process children recursively
+        for (Component comp : root.getComponents()) {
+            if (comp instanceof JComponent) {
+                JComponent jc = (JComponent) comp;
+                jc.setFont(null);
+                jc.setForeground(null);
+                jc.setBackground(null);
+            }
+            if (comp instanceof Container) {
+                resetExplicitProperties((Container) comp);
+            }
+        }
+    }
+
+    /** Re-apply tagged properties from current theme values. */
+    public static void refreshTaggedProperties(Container root) {
+        // Process root itself
+        if (root instanceof JComponent) {
+            JComponent jc = (JComponent) root;
+            String fontTag = (String) jc.getClientProperty("theme.font");
+            if (fontTag != null) jc.setFont(resolveFont(fontTag));
+            String fgTag = (String) jc.getClientProperty("theme.fg");
+            if (fgTag != null) jc.setForeground(resolveFg(fgTag));
+            String bgTag = (String) jc.getClientProperty("theme.bg");
+            if (bgTag != null) jc.setBackground(resolveBg(bgTag));
+        }
+        // Process children recursively
+        for (Component comp : root.getComponents()) {
+            if (comp instanceof JComponent) {
+                JComponent jc = (JComponent) comp;
+                String fontTag = (String) jc.getClientProperty("theme.font");
+                if (fontTag != null) jc.setFont(resolveFont(fontTag));
+                String fgTag = (String) jc.getClientProperty("theme.fg");
+                if (fgTag != null) jc.setForeground(resolveFg(fgTag));
+                String bgTag = (String) jc.getClientProperty("theme.bg");
+                if (bgTag != null) jc.setBackground(resolveBg(bgTag));
+            }
+            if (comp instanceof Container) {
+                refreshTaggedProperties((Container) comp);
+            }
         }
     }
 
@@ -434,18 +628,28 @@ public class Theme {
                     fg = ZINC_500;
                 }
 
-                g2.setColor(bg);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), RADIUS, RADIUS);
+                if (isSynthwave()) {
+                    SynthwavePainter.paintPrimaryButton(g2, 0, 0, getWidth(), getHeight(),
+                            getModel().isPressed(), getModel().isRollover(), isEnabled());
+                    fg = isEnabled() ? FG : FG_DIM;
+                } else {
+                    g2.setColor(bg);
+                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), RADIUS, RADIUS);
+                }
                 g2.setColor(fg);
                 g2.setFont(getFont());
                 FontMetrics fm = g2.getFontMetrics();
                 int tx = (getWidth() - fm.stringWidth(getText())) / 2;
                 int ty = (getHeight() + fm.getAscent() - fm.getDescent()) / 2;
                 g2.drawString(getText(), tx, ty);
-                if (isFocusOwner()) {
+                if (isFocusOwner() && !isSynthwave()) {
                     g2.setColor(RING);
                     g2.setStroke(new BasicStroke(2f));
-                    g2.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, RADIUS, RADIUS);
+                    if (isSynthwave()) {
+                        SynthwavePainter.strokeShape(g2, 1, 1, getWidth() - 2, getHeight() - 2, RING);
+                    } else {
+                        g2.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, RADIUS, RADIUS);
+                    }
                 }
                 g2.dispose();
             }
@@ -453,8 +657,8 @@ public class Theme {
         btn.setContentAreaFilled(false);
         btn.setBorderPainted(false);
         btn.setFocusPainted(false);
-        btn.setFont(FONT_BASE);
-        btn.setForeground(BG);
+        tagFont(btn, "base");
+        tagFg(btn, "bg");
         return btn;
     }
 
@@ -468,24 +672,34 @@ public class Theme {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-                Color bg = getModel().isPressed() ? ZINC_700 : getModel().isRollover() ? BG_MUTED : BG_CARD;
-                if (!isEnabled()) bg = ZINC_900;
+                Color bgColor = getModel().isPressed() ? ZINC_700 : getModel().isRollover() ? BG_MUTED : BG_CARD;
+                if (!isEnabled()) bgColor = ZINC_900;
+                Color borderColor = isEnabled() ? BORDER : ZINC_800;
 
-                g2.setColor(bg);
-                g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, RADIUS, RADIUS);
-                g2.setColor(isEnabled() ? BORDER : ZINC_800);
-                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, RADIUS, RADIUS);
+                if (isSynthwave()) {
+                    SynthwavePainter.paintSecondaryButton(g2, 0, 0, getWidth(), getHeight(),
+                            getModel().isPressed(), getModel().isRollover(), isEnabled());
+                } else {
+                    g2.setColor(bgColor);
+                    g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, RADIUS, RADIUS);
+                    g2.setColor(borderColor);
+                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, RADIUS, RADIUS);
+                }
 
-                g2.setColor(isEnabled() ? FG : ZINC_600);
+                g2.setColor(isEnabled() ? FG : (isSynthwave() ? FG_DIM : ZINC_600));
                 g2.setFont(getFont());
                 FontMetrics fm = g2.getFontMetrics();
                 int tx = (getWidth() - fm.stringWidth(getText())) / 2;
                 int ty = (getHeight() + fm.getAscent() - fm.getDescent()) / 2;
                 g2.drawString(getText(), tx, ty);
-                if (isFocusOwner()) {
+                if (isFocusOwner() && !isSynthwave()) {
                     g2.setColor(RING);
                     g2.setStroke(new BasicStroke(2f));
-                    g2.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, RADIUS, RADIUS);
+                    if (isSynthwave()) {
+                        SynthwavePainter.strokeShape(g2, 1, 1, getWidth() - 2, getHeight() - 2, RING);
+                    } else {
+                        g2.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, RADIUS, RADIUS);
+                    }
                 }
                 g2.dispose();
             }
@@ -493,8 +707,8 @@ public class Theme {
         btn.setContentAreaFilled(false);
         btn.setBorderPainted(false);
         btn.setFocusPainted(false);
-        btn.setFont(FONT_BASE);
-        btn.setForeground(FG);
+        tagFont(btn, "base");
+        tagFg(btn, "fg");
         return btn;
     }
 
@@ -508,21 +722,29 @@ public class Theme {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-                if (getModel().isRollover() || getModel().isPressed()) {
-                    g2.setColor(getModel().isPressed() ? ZINC_700 : BG_MUTED);
+                if (isSynthwave()) {
+                    SynthwavePainter.paintGhostButton(g2, 0, 0, getWidth(), getHeight(),
+                            getModel().isPressed(), getModel().isRollover(), isEnabled());
+                } else if (getModel().isRollover() || getModel().isPressed()) {
+                    Color hoverBg = getModel().isPressed() ? ZINC_700 : BG_MUTED;
+                    g2.setColor(hoverBg);
                     g2.fillRoundRect(0, 0, getWidth(), getHeight(), RADIUS, RADIUS);
                 }
 
-                g2.setColor(isEnabled() ? getForeground() : ZINC_600);
+                g2.setColor(isEnabled() ? getForeground() : (isSynthwave() ? FG_DIM : ZINC_600));
                 g2.setFont(getFont());
                 FontMetrics fm = g2.getFontMetrics();
                 int tx = (getWidth() - fm.stringWidth(getText())) / 2;
                 int ty = (getHeight() + fm.getAscent() - fm.getDescent()) / 2;
                 g2.drawString(getText(), tx, ty);
-                if (isFocusOwner()) {
+                if (isFocusOwner() && !isSynthwave()) {
                     g2.setColor(RING);
                     g2.setStroke(new BasicStroke(2f));
-                    g2.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, RADIUS, RADIUS);
+                    if (isSynthwave()) {
+                        SynthwavePainter.strokeShape(g2, 1, 1, getWidth() - 2, getHeight() - 2, RING);
+                    } else {
+                        g2.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, RADIUS, RADIUS);
+                    }
                 }
                 g2.dispose();
             }
@@ -530,8 +752,8 @@ public class Theme {
         btn.setContentAreaFilled(false);
         btn.setBorderPainted(false);
         btn.setFocusPainted(false);
-        btn.setFont(FONT_BASE);
-        btn.setForeground(FG);
+        tagFont(btn, "base");
+        tagFg(btn, "fg");
         return btn;
     }
 
@@ -539,8 +761,23 @@ public class Theme {
      * Create a styled progress bar with rounded track and fill.
      */
     public static JProgressBar styledProgressBar() {
-        JProgressBar bar = new JProgressBar(0, 100);
-        bar.setUI(new BasicProgressBarUI() {
+        JProgressBar bar = new JProgressBar(0, 100) {
+            @Override
+            public void updateUI() {
+                // Re-apply custom UI instead of letting L&F replace it
+                setUI(createProgressBarUI(this));
+            }
+        };
+        bar.setUI(createProgressBarUI(bar));
+        bar.setOpaque(false);
+        bar.setBorder(BorderFactory.createEmptyBorder());
+        bar.setStringPainted(true);
+        tagFont(bar, "small");
+        return bar;
+    }
+
+    private static BasicProgressBarUI createProgressBarUI(JProgressBar bar) {
+        return new BasicProgressBarUI() {
             @Override
             protected void paintDeterminate(Graphics g, JComponent c) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -548,20 +785,31 @@ public class Theme {
 
                 int w = c.getWidth();
                 int h = c.getHeight();
-                int r = h;
 
-                // Track
-                g2.setColor(BG_MUTED);
-                g2.fillRoundRect(0, 0, w, h, r, r);
+                boolean done = bar.getPercentComplete() >= 1.0;
+                Color fillColor = done ? SUCCESS : ACCENT;
 
-                // Fill
-                int fillW = (int) (w * bar.getPercentComplete());
-                if (fillW > 0) {
-                    g2.setColor(ACCENT);
-                    g2.fillRoundRect(0, 0, fillW, h, r, r);
+                if (isSynthwave()) {
+                    Color swFill = done && SW_GREEN != null ? SW_GREEN : fillColor;
+                    int segments = 20;
+                    int segW = (w - (segments - 1) * 2) / segments;
+                    int filled = (int) (segments * bar.getPercentComplete());
+                    for (int i = 0; i < segments; i++) {
+                        int sx = i * (segW + 2);
+                        g2.setColor(i < filled ? swFill : BG_MUTED);
+                        g2.fillRect(sx, 0, segW, h);
+                    }
+                } else {
+                    int r = h;
+                    g2.setColor(BG_MUTED);
+                    g2.fillRoundRect(0, 0, w, h, r, r);
+                    int fillW = (int) (w * bar.getPercentComplete());
+                    if (fillW > 0) {
+                        g2.setColor(fillColor);
+                        g2.fillRoundRect(0, 0, fillW, h, r, r);
+                    }
                 }
 
-                // Text
                 if (bar.isStringPainted()) {
                     g2.setFont(FONT_SMALL);
                     g2.setColor(FG);
@@ -579,12 +827,7 @@ public class Theme {
             protected void paintIndeterminate(Graphics g, JComponent c) {
                 paintDeterminate(g, c);
             }
-        });
-        bar.setOpaque(false);
-        bar.setBorder(BorderFactory.createEmptyBorder());
-        bar.setStringPainted(true);
-        bar.setFont(FONT_SMALL);
-        return bar;
+        };
     }
 
     /**
@@ -592,8 +835,8 @@ public class Theme {
      */
     public static JLabel sectionLabel(String text) {
         JLabel label = new JLabel(text.toUpperCase());
-        label.setFont(FONT_TITLE);
-        label.setForeground(FG_MUTED);
+        tagFont(label, "title");
+        tagFg(label, "sectionFg");
         return label;
     }
 
@@ -602,8 +845,8 @@ public class Theme {
      */
     public static JLabel paramLabel(String text) {
         JLabel label = new JLabel(text);
-        label.setFont(FONT_LABEL);
-        label.setForeground(FG_MUTED);
+        tagFont(label, "label");
+        tagFg(label, "fgMuted");
         return label;
     }
 
@@ -612,8 +855,8 @@ public class Theme {
      */
     public static JLabel valueLabel(String text) {
         JLabel label = new JLabel(text);
-        label.setFont(FONT_MONO);
-        label.setForeground(FG);
+        tagFont(label, "mono");
+        tagFg(label, "fg");
         return label;
     }
 
@@ -626,10 +869,15 @@ public class Theme {
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(BG_CARD);
-                g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, RADIUS_LG, RADIUS_LG);
-                g2.setColor(BORDER);
-                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, RADIUS_LG, RADIUS_LG);
+                if (isSynthwave()) {
+                    SynthwavePainter.fillPanel(g2, 0, 0, getWidth(), getHeight(), BG_CARD, BORDER);
+                    SynthwavePainter.paintBevel(g2, 0, 0, getWidth(), getHeight(), true);
+                } else {
+                    g2.setColor(BG_CARD);
+                    g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, RADIUS_LG, RADIUS_LG);
+                    g2.setColor(BORDER);
+                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, RADIUS_LG, RADIUS_LG);
+                }
                 g2.dispose();
             }
         };
@@ -651,14 +899,24 @@ public class Theme {
                 int trackH = 6;
                 int y = trackRect.y + (trackRect.height - trackH) / 2;
 
-                // Full track background
-                g2.setColor(BG_MUTED);
-                g2.fillRoundRect(trackRect.x, y, trackRect.width, trackH, trackH, trackH);
-
-                // Filled portion
-                int fillW = thumbRect.x + thumbRect.width / 2 - trackRect.x;
-                g2.setColor(ACCENT);
-                g2.fillRoundRect(trackRect.x, y, fillW, trackH, trackH, trackH);
+                if (isSynthwave()) {
+                    // Rectangular track with pixel corners
+                    SynthwavePainter.fillPanel(g2, trackRect.x, y, trackRect.width, trackH,
+                            BG_MUTED, SW_PURPLE);
+                    // Filled portion with glow
+                    int fillW = thumbRect.x + thumbRect.width / 2 - trackRect.x;
+                    if (fillW > 2) {
+                        g2.setColor(ACCENT);
+                        g2.fillRect(trackRect.x + 1, y + 1, fillW - 1, trackH - 2);
+                        SynthwavePainter.paintGlow(g2, trackRect.x, y, fillW, trackH, ACCENT, 2);
+                    }
+                } else {
+                    g2.setColor(BG_MUTED);
+                    g2.fillRoundRect(trackRect.x, y, trackRect.width, trackH, trackH, trackH);
+                    int fillW = thumbRect.x + thumbRect.width / 2 - trackRect.x;
+                    g2.setColor(ACCENT);
+                    g2.fillRoundRect(trackRect.x, y, fillW, trackH, trackH, trackH);
+                }
 
                 g2.dispose();
             }
@@ -672,17 +930,18 @@ public class Theme {
                 int x = thumbRect.x + (thumbRect.width - size) / 2;
                 int y = thumbRect.y + (thumbRect.height - size) / 2;
 
-                // Shadow
-                g2.setColor(SHADOW);
-                g2.fillOval(x + 1, y + 1, size, size);
-
-                // Thumb
-                g2.setColor(THUMB);
-                g2.fillOval(x, y, size, size);
-
-                // Border
-                g2.setColor(ACCENT);
-                g2.drawOval(x, y, size - 1, size - 1);
+                if (isSynthwave()) {
+                    // Square thumb with pixel corners
+                    SynthwavePainter.fillPanel(g2, x, y, size, size, SW_LAVENDER, SW_PURPLE);
+                    SynthwavePainter.paintBevel(g2, x, y, size, size, true);
+                } else {
+                    g2.setColor(SHADOW);
+                    g2.fillOval(x + 1, y + 1, size, size);
+                    g2.setColor(THUMB);
+                    g2.fillOval(x, y, size, size);
+                    g2.setColor(ACCENT);
+                    g2.drawOval(x, y, size - 1, size - 1);
+                }
 
                 g2.dispose();
             }
@@ -715,8 +974,8 @@ public class Theme {
         panel.setAlignmentX(0);
 
         JLabel label = new JLabel(text.toUpperCase());
-        label.setFont(FONT_SECTION);
-        label.setForeground(FG_MUTED);
+        tagFont(label, "section");
+        tagFg(label, "sectionFg");
         label.setAlignmentX(0);
         panel.add(label);
         panel.add(javax.swing.Box.createVerticalStrut(4));

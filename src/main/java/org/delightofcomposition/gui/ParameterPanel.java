@@ -1,6 +1,7 @@
 package org.delightofcomposition.gui;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
@@ -335,7 +336,10 @@ public class ParameterPanel extends JPanel implements Scrollable {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-                if (getModel().isRollover() || getModel().isPressed()) {
+                if (Theme.isSynthwave()) {
+                    SynthwavePainter.paintGhostButton(g2, 0, 0, getWidth(), getHeight(),
+                            getModel().isPressed(), getModel().isRollover(), isEnabled());
+                } else if (getModel().isRollover() || getModel().isPressed()) {
                     g2.setColor(getModel().isPressed() ? Theme.ZINC_700 : Theme.BG_MUTED);
                     g2.fillRoundRect(0, 0, getWidth(), getHeight(), Theme.RADIUS, Theme.RADIUS);
                 }
@@ -439,16 +443,17 @@ public class ParameterPanel extends JPanel implements Scrollable {
         card.setOpaque(false);
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(BorderFactory.createCompoundBorder(
-                new Theme.RoundedBorder(Theme.BORDER, Theme.RADIUS_LG, new Insets(0, 0, 0, 0)),
+                new Theme.RoundedBorder(null, -1, new Insets(0, 0, 0, 0)),
                 BorderFactory.createEmptyBorder(16, 16, 16, 16)));
         return card;
     }
 
     private static JTextField styledTextField(String text) {
         JTextField field = new JTextField(text);
-        field.setFont(Theme.FONT_MONO);
+        Theme.tagFont(field, "mono");
+        Theme.tagFg(field, "fg");
         field.setBorder(BorderFactory.createCompoundBorder(
-                new Theme.RoundedBorder(Theme.BORDER, Theme.RADIUS_SM, new Insets(0, 0, 0, 0)),
+                new Theme.RoundedBorder(null, -1, new Insets(0, 0, 0, 0)),
                 BorderFactory.createEmptyBorder(8, 10, 8, 10)));
         field.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
         field.setPreferredSize(new Dimension(200, 40));

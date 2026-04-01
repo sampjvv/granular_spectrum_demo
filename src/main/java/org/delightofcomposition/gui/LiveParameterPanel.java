@@ -57,7 +57,7 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
     public LiveParameterPanel(SynthParameters params) {
         this.params = params;
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-        setBackground(Theme.BG);
+        Theme.tagBg(this, "bg");
         setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
 
         add(buildSamplesSection());
@@ -334,7 +334,7 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
         card.setOpaque(false);
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(BorderFactory.createCompoundBorder(
-                new Theme.RoundedBorder(Theme.BORDER, Theme.RADIUS_LG, new Insets(0, 0, 0, 0)),
+                new Theme.RoundedBorder(null, -1, new Insets(0, 0, 0, 0)),
                 BorderFactory.createEmptyBorder(16, 16, 16, 16)));
         return card;
     }

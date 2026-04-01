@@ -52,12 +52,16 @@ public class SampleDropPanel extends JPanel {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
                 // Background
-                g2.setColor(hovering ? Theme.ACCENT_MUTED : Theme.BG_INPUT);
-                g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, Theme.RADIUS, Theme.RADIUS);
-
-                // Border — dashed feel via color change on hover
-                g2.setColor(hovering ? Theme.ACCENT : Theme.BORDER);
-                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, Theme.RADIUS, Theme.RADIUS);
+                Color bg = hovering ? Theme.ACCENT_MUTED : Theme.BG_INPUT;
+                Color border = hovering ? Theme.ACCENT : Theme.BORDER;
+                if (Theme.isSynthwave()) {
+                    SynthwavePainter.fillPanel(g2, 0, 0, getWidth(), getHeight(), bg, border);
+                } else {
+                    g2.setColor(bg);
+                    g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, Theme.RADIUS, Theme.RADIUS);
+                    g2.setColor(border);
+                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, Theme.RADIUS, Theme.RADIUS);
+                }
 
                 g2.dispose();
             }
@@ -69,13 +73,13 @@ public class SampleDropPanel extends JPanel {
         labels.setOpaque(false);
 
         titleLabel = new JLabel(title);
-        titleLabel.setFont(Theme.FONT_SMALL);
-        titleLabel.setForeground(Theme.FG_DIM);
+        Theme.tagFont(titleLabel, "small");
+        Theme.tagFg(titleLabel, "fgDim");
         labels.add(titleLabel, BorderLayout.NORTH);
 
         fileLabel = new JLabel(initialFile != null ? initialFile.getName() : "Drop WAV here");
-        fileLabel.setFont(Theme.FONT_BASE);
-        fileLabel.setForeground(Theme.FG);
+        Theme.tagFont(fileLabel, "base");
+        Theme.tagFg(fileLabel, "fg");
         fileLabel.setHorizontalAlignment(SwingConstants.LEFT);
         labels.add(fileLabel, BorderLayout.CENTER);
 

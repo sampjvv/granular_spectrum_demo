@@ -1,6 +1,7 @@
 package org.delightofcomposition.gui;
 
 import java.awt.BasicStroke;
+import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FontMetrics;
@@ -26,7 +27,7 @@ import javax.swing.event.ChangeListener;
  */
 public class SegmentedControl extends JComponent {
 
-    private static final int HEIGHT = 34;
+    private static int height() { return Theme.isSynthwave() ? 40 : 34; }
     private static final int INSET = 3;
     private static final int ANIM_FRAMES = 8;
     private static final int ANIM_DELAY = 15;
@@ -43,7 +44,7 @@ public class SegmentedControl extends JComponent {
         this.animPos = initialIndex;
         setOpaque(false);
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        setFont(Theme.FONT_SMALL);
+        Theme.tagFont(this, "small");
         setFocusable(true);
 
         addMouseListener(new MouseAdapter() {
@@ -79,42 +80,126 @@ public class SegmentedControl extends JComponent {
 
         int w = getWidth();
         int h = getHeight();
-        int radius = h;
 
-        // Container pill
-        g2.setColor(Theme.BG_MUTED);
-        g2.fillRoundRect(0, 0, w, h, radius, radius);
-        g2.setColor(Theme.BORDER);
-        g2.drawRoundRect(0, 0, w - 1, h - 1, radius, radius);
+        if (Theme.isSynthwave()) {
+            // Pixel-corner container
+            SynthwavePainter.fillPanel(g2, 0, 0, w, h, Theme.BG_MUTED, Theme.SW_PURPLE);
 
-        // Segment dimensions
-        int innerW = w - INSET * 2;
-        int segW = innerW / labels.length;
-        int segH = h - INSET * 2;
-        int segRadius = segH;
+            // Segment dimensions
+            int innerW = w - INSET * 2;
+            int segW = innerW / labels.length;
+            int segH = h - INSET * 2;
 
-        // Active segment pill (animated)
-        int activeX = INSET + (int) (animPos * segW);
-        g2.setColor(Theme.ACCENT);
-        g2.fillRoundRect(activeX, INSET, segW, segH, segRadius, segRadius);
+            // Clip active fill to container's inner polygon so corners align
+            SynthwavePainter.CornerSize sz = SynthwavePainter.chooseSizeForDimensions(w, h);
+            java.awt.Polygon innerClip = SynthwavePainter.pixelCornerShapeInset(
+                    0, 0, w, h, sz, SynthwavePainter.BORDER_WIDTH);
+            java.awt.Shape origClip = g2.getClip();
+            g2.clip(innerClip);
 
-        // Labels
-        FontMetrics fm = g2.getFontMetrics(getFont());
-        g2.setFont(getFont());
-        for (int i = 0; i < labels.length; i++) {
-            int segX = INSET + i * segW;
-            boolean active = i == selectedIndex;
-            g2.setColor(active ? Theme.THUMB : Theme.FG_MUTED);
-            int tx = segX + (segW - fm.stringWidth(labels[i])) / 2;
-            int ty = (h + fm.getAscent() - fm.getDescent()) / 2;
-            g2.drawString(labels[i], tx, ty);
-        }
+            // Active segment — gradient fill with strong edge shading
+            int activeX = INSET + (int) (animPos * segW);
+            // Extend last segment to fill any rounding gap
+            int activeW = (Math.round(animPos) >= labels.length - 1)
+                    ? (INSET + innerW - activeX) : segW;
+            Color accentBright = new Color(
+                    Math.min(255, Theme.ACCENT.getRed() + 40),
+                    Math.min(255, Theme.ACCENT.getGreen() + 30),
+                    Math.min(255, Theme.ACCENT.getBlue() + 30));
+            int arc = 8;
+            java.awt.GradientPaint gp = new java.awt.GradientPaint(
+                    0, INSET, accentBright, 0, INSET + segH, Theme.ACCENT);
+            g2.setPaint(gp);
+            g2.fillRoundRect(activeX, INSET, activeW, segH, arc, arc);
 
-        // Focus ring
-        if (isFocusOwner()) {
-            g2.setColor(Theme.RING);
-            g2.setStroke(new BasicStroke(2f));
-            g2.drawRoundRect(1, 1, w - 3, h - 3, radius, radius);
+            // Edge shading — clip to top-left or bottom-right halves
+            // so highlight and shadow don't bleed onto the wrong edges
+            java.awt.Composite origComp = g2.getComposite();
+
+            // Top + left highlight: clip to top-left diagonal half
+            g2.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, 0.35f));
+            g2.setColor(Color.WHITE);
+            for (int d = 0; d < 3; d++) {
+                java.awt.Polygon hlClip = new java.awt.Polygon(
+                    new int[] { activeX, activeX + activeW, activeX },
+                    new int[] { INSET, INSET, INSET + segH },
+                    3);
+                g2.setClip(innerClip);
+                g2.clip(hlClip);
+                g2.drawRoundRect(activeX + d, INSET + d, activeW - 2 * d - 1, segH - 2 * d - 1, arc - d, arc - d);
+            }
+
+            // Bottom + right shadow: clip to bottom-right diagonal half
+            g2.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, 0.4f));
+            g2.setColor(Color.BLACK);
+            for (int d = 0; d < 3; d++) {
+                java.awt.Polygon shClip = new java.awt.Polygon(
+                    new int[] { activeX + activeW, activeX + activeW, activeX },
+                    new int[] { INSET, INSET + segH, INSET + segH },
+                    3);
+                g2.setClip(innerClip);
+                g2.clip(shClip);
+                g2.drawRoundRect(activeX + d, INSET + d, activeW - 2 * d - 1, segH - 2 * d - 1, arc - d, arc - d);
+            }
+
+            g2.setClip(origClip);
+            g2.setComposite(origComp);
+            g2.setClip(origClip);
+
+            // Cyan bottom accent line with glow (outside clip)
+            g2.setColor(Theme.SW_CYAN);
+            g2.fillRect(activeX + 2, h - INSET - 2, activeW - 4, 2);
+            SynthwavePainter.paintGlow(g2, activeX + 2, h - INSET - 2, activeW - 4, 2, Theme.SW_CYAN, 3);
+
+            // Labels
+            FontMetrics fm = g2.getFontMetrics(getFont());
+            g2.setFont(getFont());
+            for (int i = 0; i < labels.length; i++) {
+                int segX = INSET + i * segW;
+                boolean active = i == selectedIndex;
+                g2.setColor(active ? Theme.BG : Theme.FG_MUTED);
+                int tx = segX + (segW - fm.stringWidth(labels[i])) / 2;
+                int ty = (h + fm.getAscent() - fm.getDescent()) / 2;
+                g2.drawString(labels[i], tx, ty);
+            }
+        } else {
+            int radius = h;
+
+            // Container pill
+            g2.setColor(Theme.BG_MUTED);
+            g2.fillRoundRect(0, 0, w, h, radius, radius);
+            g2.setColor(Theme.BORDER);
+            g2.drawRoundRect(0, 0, w - 1, h - 1, radius, radius);
+
+            // Segment dimensions
+            int innerW = w - INSET * 2;
+            int segW = innerW / labels.length;
+            int segH = h - INSET * 2;
+            int segRadius = segH;
+
+            // Active segment pill (animated)
+            int activeX = INSET + (int) (animPos * segW);
+            g2.setColor(Theme.ACCENT);
+            g2.fillRoundRect(activeX, INSET, segW, segH, segRadius, segRadius);
+
+            // Labels
+            FontMetrics fm = g2.getFontMetrics(getFont());
+            g2.setFont(getFont());
+            for (int i = 0; i < labels.length; i++) {
+                int segX = INSET + i * segW;
+                boolean active = i == selectedIndex;
+                g2.setColor(active ? Theme.THUMB : Theme.FG_MUTED);
+                int tx = segX + (segW - fm.stringWidth(labels[i])) / 2;
+                int ty = (h + fm.getAscent() - fm.getDescent()) / 2;
+                g2.drawString(labels[i], tx, ty);
+            }
+
+            // Focus ring
+            if (isFocusOwner() && !Theme.isSynthwave()) {
+                g2.setColor(Theme.RING);
+                g2.setStroke(new BasicStroke(2f));
+                g2.drawRoundRect(1, 1, w - 3, h - 3, radius, radius);
+            }
         }
 
         g2.dispose();
@@ -122,17 +207,17 @@ public class SegmentedControl extends JComponent {
 
     @Override
     public Dimension getPreferredSize() {
-        return new Dimension(200, HEIGHT);
+        return new Dimension(200, height());
     }
 
     @Override
     public Dimension getMaximumSize() {
-        return new Dimension(Integer.MAX_VALUE, HEIGHT);
+        return new Dimension(Integer.MAX_VALUE, height());
     }
 
     @Override
     public Dimension getMinimumSize() {
-        return new Dimension(100, HEIGHT);
+        return new Dimension(100, height());
     }
 
     public int getSelectedIndex() {
