@@ -574,13 +574,17 @@ public class MainWindow extends JFrame {
         regionCard.add(Box.createVerticalStrut(4));
         regionCard.add(palindromeCrossfadePanel);
 
+        CollapsibleSection regionSection = new CollapsibleSection(regionCard, true);
+        regionSection.setCollapsed();
+
         JPanel envelopeWrapper = new JPanel(new BorderLayout(0, 4));
         envelopeWrapper.setOpaque(false);
         envelopeWrapper.setBorder(BorderFactory.createEmptyBorder(8, 8, 0, 8));
-        envelopeWrapper.add(regionCard, BorderLayout.NORTH);
+        envelopeWrapper.add(regionSection, BorderLayout.NORTH);
         envelopeWrapper.add(envelopeScroll, BorderLayout.CENTER);
 
         envelopeScroll.setMinimumSize(new Dimension(0, 280));
+
         waveformDisplay.setPreferredSize(new Dimension(0, 280));
         waveformDisplay.setMinimumSize(new Dimension(0, 280));
         waveformDisplay.setMaximumSize(new Dimension(Integer.MAX_VALUE, 280));
