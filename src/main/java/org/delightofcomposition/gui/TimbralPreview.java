@@ -132,7 +132,7 @@ public class TimbralPreview extends JComponent {
             // dynamics controls vertical height (dB scale)
             double dynH;
             if (dynOn) {
-                double dynamics = Math.max(1e-6, interpolate(dynamicsEnv, t));
+                double dynamics = Math.max(1e-6, interpolateLog(dynamicsEnv, t));
                 double dB = 20 * Math.log10(dynamics);
                 dynH = clamp((dB + 60.0) / 62.0, 0.0, 1.0);
             } else {
@@ -286,7 +286,7 @@ public class TimbralPreview extends JComponent {
             // Dynamics → active height (dB scale)
             double dynH;
             if (dynOn) {
-                double dynamics = Math.max(1e-6, interpolate(dynamicsEnv, t));
+                double dynamics = Math.max(1e-6, interpolateLog(dynamicsEnv, t));
                 double dB = 20 * Math.log10(dynamics);
                 dynH = clamp((dB + 60.0) / 62.0, 0.0, 1.0);
             } else {
@@ -385,6 +385,31 @@ public class TimbralPreview extends JComponent {
                 if (span <= 0) return values[i];
                 double frac = (t - times[i]) / span;
                 return values[i] + frac * (values[i + 1] - values[i]);
+            }
+        }
+        return values[values.length - 1];
+    }
+
+    /** Interpolate in dB space so the result follows the logarithmic envelope canvas. */
+    private double interpolateLog(Envelope env, double t) {
+        double[] times = env.times;
+        double[] values = env.values;
+        if (times.length == 0) return 0;
+        if (t <= times[0]) return values[0];
+        if (t >= times[times.length - 1]) return values[times.length - 1];
+
+        for (int i = 0; i < times.length - 1; i++) {
+            if (t >= times[i] && t <= times[i + 1]) {
+                double span = times[i + 1] - times[i];
+                if (span <= 0) return values[i];
+                double frac = (t - times[i]) / span;
+                // Apply segment curve shaping
+                frac = Envelope.applyCurve(frac, env.getCurve(i));
+                // Convert to dB, interpolate linearly in dB, convert back
+                double db1 = 20 * Math.log10(Math.max(1e-6, values[i]));
+                double db2 = 20 * Math.log10(Math.max(1e-6, values[i + 1]));
+                double dbInterp = db1 + frac * (db2 - db1);
+                return Math.pow(10, dbInterp / 20.0);
             }
         }
         return values[values.length - 1];
