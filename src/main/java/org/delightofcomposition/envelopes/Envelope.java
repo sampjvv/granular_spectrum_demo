@@ -31,11 +31,12 @@ import java.awt.event.WindowEvent;
  * @version (a version number or a date)
  */
 public class Envelope {
-    public double[] times, values;
+    public double[] times, values, curves;
     double duration;
     int lastX = 0;
     Timer clock;
     public ArrayList<int[]> coords;
+    public ArrayList<Double> segmentCurves;
     boolean block;
     File file;
     public int type;// 0 = continuous, 1 = linear
@@ -43,10 +44,26 @@ public class Envelope {
     public Envelope(double[] t, double[] v) {
         times = t;
         values = v;
+        curves = null;
         duration = 1;
         coords = new ArrayList<int[]>();
         coords.add(new int[] { 0, 0 });
         coords.add(new int[] { Integer.MAX_VALUE, 0 });
+        segmentCurves = new ArrayList<>();
+        segmentCurves.add(0.0);
+        type = 0;
+    }
+
+    public Envelope(double[] t, double[] v, double[] c) {
+        times = t;
+        values = v;
+        curves = c;
+        duration = 1;
+        coords = new ArrayList<int[]>();
+        coords.add(new int[] { 0, 0 });
+        coords.add(new int[] { Integer.MAX_VALUE, 0 });
+        segmentCurves = new ArrayList<>();
+        segmentCurves.add(0.0);
         type = 0;
     }
 
@@ -55,11 +72,9 @@ public class Envelope {
         coords = new ArrayList<int[]>();
         coords.add(new int[] { 0, 0 });
         coords.add(new int[] { Integer.MAX_VALUE, 0 });
+        segmentCurves = new ArrayList<>();
+        segmentCurves.add(0.0);
         type = 0;
-        // gui();
-
-        // String name = JOptionPane.showInputDialog(frame, "Please name your
-        // envelope.");
     }
 
     public Envelope(String name) {
@@ -67,10 +82,10 @@ public class Envelope {
         coords = new ArrayList<int[]>();
         coords.add(new int[] { 0, 0 });
         coords.add(new int[] { Integer.MAX_VALUE, 0 });
+        segmentCurves = new ArrayList<>();
+        segmentCurves.add(0.0);
         new JOptionPane().showConfirmDialog(null, "Please design a " + name + " envelope.");
         type = 0;
-        // gui();
-
     }
 
     public File getFile() {
@@ -288,6 +303,17 @@ public class Envelope {
         duration = dur;
     }
 
+    public static double applyCurve(double frac, double curve) {
+        if (curve == 0.0 || frac <= 0.0 || frac >= 1.0) return frac;
+        double exponent = Math.pow(4.0, curve);
+        return Math.pow(frac, exponent);
+    }
+
+    public double getCurve(int segmentIndex) {
+        if (curves == null || segmentIndex < 0 || segmentIndex >= curves.length) return 0.0;
+        return curves[segmentIndex];
+    }
+
     public double getValue(double time) {
         time /= duration;
         if (times == null || times.length == 0) return 0;
@@ -306,6 +332,7 @@ public class Envelope {
         double y1 = values[i], y2 = values[i + 1];
         if (x1 == x2) return y2;
         double frac = (time - x1) / (x2 - x1);
-        return y1 + frac * (y2 - y1);
+        double shapedFrac = applyCurve(frac, getCurve(i));
+        return y1 + shapedFrac * (y2 - y1);
     }
 }

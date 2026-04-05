@@ -13,6 +13,7 @@ import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JComponent;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingWorker;
 
@@ -31,6 +32,7 @@ public class WaveformDisplay extends JPanel {
     private final SegmentedControl tabs;
     private final WaveformCanvas canvas;
     private final JPanel card;
+    private JLabel outputLabel;
     private BufferedImage spectrogramImage;
     private volatile boolean computingSpectrogram = false;
 
@@ -49,6 +51,15 @@ public class WaveformDisplay extends JPanel {
                     SynthwavePainter.fillPanel(g2, 0, 0, getWidth(), getHeight(),
                             Theme.BG_CARD, Theme.BORDER);
                     SynthwavePainter.paintBevel(g2, 0, 0, getWidth(), getHeight(), true);
+                } else if (Theme.isPaper()) {
+                    g2.setColor(Theme.BG_CARD);
+                    g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
+                            Theme.RADIUS_LG, Theme.RADIUS_LG);
+                    g2.setStroke(new BasicStroke(
+                            com.sptc.uilab.tokens.PaperMinimalistTokens.BORDER_WIDTH));
+                    g2.setColor(com.sptc.uilab.tokens.PaperMinimalistTokens.INK);
+                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
+                            Theme.RADIUS_LG, Theme.RADIUS_LG);
                 } else {
                     g2.setColor(Theme.BG_CARD);
                     g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
@@ -66,7 +77,8 @@ public class WaveformDisplay extends JPanel {
         // Header with tabs
         JPanel header = new JPanel(new BorderLayout());
         header.setOpaque(false);
-        header.add(Theme.sectionLabel("Output"), BorderLayout.WEST);
+        outputLabel = Theme.sectionLabel("Output");
+        header.add(outputLabel, BorderLayout.WEST);
 
         tabs = new SegmentedControl(new String[]{"Waveform", "Spectrogram"}, 0);
         tabs.setPreferredSize(new Dimension(200, 28));
@@ -84,6 +96,13 @@ public class WaveformDisplay extends JPanel {
     }
 
     public void setTimbralPreview(TimbralPreview preview) {
+        // Refresh Output label font for theme switch
+        Theme.tagFont(outputLabel, "title");
+        // Remove previous timbral blend panel to prevent duplication
+        java.awt.Component existing = ((java.awt.BorderLayout) card.getLayout())
+                .getLayoutComponent(java.awt.BorderLayout.SOUTH);
+        if (existing != null) card.remove(existing);
+
         JPanel south = new JPanel(new BorderLayout(0, 4));
         south.setOpaque(false);
         south.setBorder(BorderFactory.createEmptyBorder(6, 0, 0, 0));
@@ -177,13 +196,14 @@ public class WaveformDisplay extends JPanel {
     }
 
     private static Color gradientColor(double t) {
-        // 0.0 = BG_INPUT, 0.5 = ACCENT, 1.0 = ZINC_50
+        // 0.0 = BG_INPUT, 0.5 = mid color, 1.0 = ZINC_50
+        Color mid = Theme.isPaper() ? new Color(0x9A, 0xB4, 0xCC) : Theme.ACCENT;
         if (t < 0.5) {
             double f = t / 0.5;
-            return blendColor(Theme.BG_INPUT, Theme.ACCENT, f);
+            return blendColor(Theme.BG_INPUT, mid, f);
         } else {
             double f = (t - 0.5) / 0.5;
-            return blendColor(Theme.ACCENT, Theme.ZINC_50, f);
+            return blendColor(mid, Theme.ZINC_50, f);
         }
     }
 
@@ -268,7 +288,7 @@ public class WaveformDisplay extends JPanel {
             g2.drawLine(0, h / 2, w, h / 2);
 
             // Draw waveform
-            g2.setColor(Theme.ACCENT);
+            g2.setColor(Theme.isPaper() ? new Color(0x9A, 0xB4, 0xCC) : Theme.ACCENT);
             g2.setStroke(new BasicStroke(1));
 
             for (int x = 0; x < w; x++) {

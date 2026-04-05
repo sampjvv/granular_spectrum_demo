@@ -69,6 +69,7 @@ public class MainWindow extends JFrame {
     private ParameterPanel parameterPanel;
     private EnvelopeEditorPanel envelopePanel;
     private WaveformDisplay waveformDisplay;
+    private JScrollPane envelopeScroll;
     private JButton helpBtn;
     private JButton saveToLibBtn;
     private JButton liveSavePresetBtn;
@@ -245,6 +246,10 @@ public class MainWindow extends JFrame {
                         }
                     }
                 }
+                // Rebuild panels that swap PmXxx components for Paper theme
+                parameterPanel.rebuild();
+                envelopePanel.rebuild();
+                waveformDisplay.setTimbralPreview(envelopePanel.getTimbralPreview());
                 SwingUtilities.updateComponentTreeUI(this);
                 Theme.refreshTaggedProperties(getContentPane());
                 refreshMenuBar();
@@ -323,6 +328,11 @@ public class MainWindow extends JFrame {
         clearSplitPaneOpacity(wavSplit);
         clearSplitPaneOpacity(rightSplit);
         clearSplitPaneOpacity(liveSplit);
+        // Keep envelope viewport opaque so toggle repaints don't bleed
+        if (envelopeScroll != null) {
+            envelopeScroll.getViewport().setOpaque(true);
+            envelopeScroll.getViewport().setBackground(Theme.BG);
+        }
 
         // Toggle CRT scanline overlay
         if (Theme.isSynthwave()) {
@@ -505,11 +515,14 @@ public class MainWindow extends JFrame {
         envelopePanel = new EnvelopeEditorPanel(params);
         waveformDisplay = new WaveformDisplay();
 
-        JScrollPane envelopeScroll = new JScrollPane(envelopePanel);
+        envelopeScroll = new JScrollPane(envelopePanel);
         envelopeScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         envelopeScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         envelopeScroll.getVerticalScrollBar().setUnitIncrement(16);
         Theme.styleScrollPane(envelopeScroll);
+        envelopeScroll.getViewport().setOpaque(true);
+        envelopeScroll.getViewport().setBackground(Theme.BG);
+        envelopeScroll.getViewport().setScrollMode(javax.swing.JViewport.SIMPLE_SCROLL_MODE);
 
         waveformDisplay.setTimbralPreview(envelopePanel.getTimbralPreview());
 

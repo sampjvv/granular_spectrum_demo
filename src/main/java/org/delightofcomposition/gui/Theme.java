@@ -81,6 +81,8 @@ public class Theme {
     public static Color THUMB  = ZINC_50;
     /** Subtle drop shadow for thumbs and elevated elements. */
     public static Color SHADOW = new Color(0, 0, 0, 40);
+    /** Color for numeric value readouts. */
+    public static Color VALUE_FG = FG;
 
     // ── Typography ──
     public static Font FONT_BASE    = new Font("Segoe UI", Font.PLAIN, 13);
@@ -138,6 +140,11 @@ public class Theme {
         return currentPreset == ThemePreset.NEON_OUTRUN;
     }
 
+    /** Returns true when the active theme is the Paper Minimalist preset. */
+    public static boolean isPaper() {
+        return currentPreset == ThemePreset.PAPER_MINIMALIST;
+    }
+
     /**
      * Apply a theme preset: overwrites all mutable static fields, then calls
      * {@link #install()} to refresh UIManager defaults.
@@ -173,6 +180,7 @@ public class Theme {
 
         // Derived tokens
         THUMB = preset.zinc50;
+        VALUE_FG = preset.fg; // default: same as FG
         // Shadow opacity adapts: darker BG = lighter shadow, lighter BG = darker shadow
         int bgLuma = (preset.bg.getRed() + preset.bg.getGreen() + preset.bg.getBlue()) / 3;
         int shadowAlpha = bgLuma < 40 ? 40 : 60;
@@ -192,8 +200,9 @@ public class Theme {
         RADIUS_SM = preset.radiusSm  >= 0 ? preset.radiusSm  : DEF_RADIUS_SM;
         RADIUS_LG = preset.radiusLg  >= 0 ? preset.radiusLg  : DEF_RADIUS_LG;
 
-        // Synthwave-specific overrides
-        if (isSynthwave()) {
+        // ── Theme-specific overrides (mutually exclusive) ──
+
+        if (currentPreset == ThemePreset.NEON_OUTRUN) {
             SynthwaveFonts.ensureLoaded();
             FONT_BASE    = SynthwaveFonts.BODY;
             FONT_SMALL   = SynthwaveFonts.BODY_SMALL;
@@ -215,7 +224,10 @@ public class Theme {
             SW_BG_DEEP   = new Color(26, 10, 46);
             SW_BG_SURFACE = new Color(59, 42, 122);
             SW_BG_RAISED = new Color(74, 54, 153);
-        } else {
+        }
+
+        // Clear Synthwave colors when not synthwave
+        if (currentPreset != ThemePreset.NEON_OUTRUN) {
             SW_CYAN = SW_CYAN_DIM = SW_GREEN = SW_YELLOW = SW_RED = null;
             SW_PURPLE = SW_LAVENDER = SW_HOT_PINK = null;
             SW_BG_DEEP = SW_BG_SURFACE = SW_BG_RAISED = null;
@@ -542,6 +554,7 @@ public class Theme {
             case "success":     return SUCCESS;
             case "amber":       return AMBER;
             case "accent":      return ACCENT;
+            case "valueFg":     return VALUE_FG;
             default:            return FG;
         }
     }
@@ -632,6 +645,16 @@ public class Theme {
                     SynthwavePainter.paintPrimaryButton(g2, 0, 0, getWidth(), getHeight(),
                             getModel().isPressed(), getModel().isRollover(), isEnabled());
                     fg = isEnabled() ? FG : FG_DIM;
+                } else if (isPaper()) {
+                    // Border only — no fill
+                    g2.setStroke(new BasicStroke(1.5f));
+                    g2.setColor(isEnabled() ? FG : ZINC_500);
+                    g2.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, RADIUS, RADIUS);
+                    if (getModel().isRollover()) {
+                        g2.setColor(new Color(FG.getRed(), FG.getGreen(), FG.getBlue(), 15));
+                        g2.fillRoundRect(1, 1, getWidth() - 3, getHeight() - 3, RADIUS, RADIUS);
+                    }
+                    fg = isEnabled() ? FG : ZINC_500;
                 } else {
                     g2.setColor(bg);
                     g2.fillRoundRect(0, 0, getWidth(), getHeight(), RADIUS, RADIUS);
@@ -799,6 +822,52 @@ public class Theme {
                         g2.setColor(i < filled ? swFill : BG_MUTED);
                         g2.fillRect(sx, 0, segW, h);
                     }
+                } else if (isPaper()) {
+                    float[][] bayer8 = new float[8][8];
+                    int[][] raw = {
+                        { 0, 32,  8, 40,  2, 34, 10, 42},
+                        {48, 16, 56, 24, 50, 18, 58, 26},
+                        {12, 44,  4, 36, 14, 46,  6, 38},
+                        {60, 28, 52, 20, 62, 30, 54, 22},
+                        { 3, 35, 11, 43,  1, 33,  9, 41},
+                        {51, 19, 59, 27, 49, 17, 57, 25},
+                        {15, 47,  7, 39, 13, 45,  5, 37},
+                        {63, 31, 55, 23, 61, 29, 53, 21}
+                    };
+                    for (int y = 0; y < 8; y++)
+                        for (int x = 0; x < 8; x++)
+                            bayer8[y][x] = raw[y][x] / 64f;
+
+                    int r = h;
+                    g2.setColor(BG_MUTED);
+                    g2.fillRoundRect(0, 0, w, h, r, r);
+                    int fillW = (int) (w * bar.getPercentComplete());
+                    if (fillW > 0) {
+                        Color paperDark  = done ? new Color(0x4A, 0x7A, 0x5A) : new Color(0x6A, 0x5A, 0x7A);
+                        Color paperMid   = done ? new Color(0x90, 0xB8, 0xA0) : new Color(0xA0, 0x90, 0xB0);
+                        Color paperLight = done ? new Color(0xC8, 0xE4, 0xD0) : new Color(0xD0, 0xC8, 0xDA);
+                        java.awt.Shape oldClip = g2.getClip();
+                        g2.setClip(new java.awt.geom.RoundRectangle2D.Float(0, 0, fillW, h, r, r));
+                        for (int py = 0; py < h; py++) {
+                            for (int px = 0; px < fillW; px++) {
+                                float intensity = Math.max(0f, 1.0f - 1.0f * (float) px / fillW);
+                                int bx = ((int)(px / 1.5)) & 7;
+                                int by = ((int)(py / 1.5)) & 7;
+                                float threshold = bayer8[by][bx];
+                                // 3-shade dither: dark → mid → light across the bar
+                                Color shade;
+                                float shadePos = intensity * 2f;
+                                if (shadePos < 1f) {
+                                    shade = shadePos > threshold ? paperMid : paperDark;
+                                } else {
+                                    shade = (shadePos - 1f) > threshold ? paperLight : paperMid;
+                                }
+                                g2.setColor(shade);
+                                g2.fillRect(px, py, 1, 1);
+                            }
+                        }
+                        g2.setClip(oldClip);
+                    }
                 } else {
                     int r = h;
                     g2.setColor(BG_MUTED);
@@ -857,7 +926,7 @@ public class Theme {
     public static JLabel valueLabel(String text) {
         JLabel label = new JLabel(text);
         tagFont(label, "mono");
-        tagFg(label, "fg");
+        tagFg(label, "valueFg");
         return label;
     }
 

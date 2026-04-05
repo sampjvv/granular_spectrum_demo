@@ -1,6 +1,7 @@
 package org.delightofcomposition.gui;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Graphics;
@@ -18,6 +19,10 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.Scrollable;
+
+import com.sptc.uilab.papermin.PmButton;
+import com.sptc.uilab.papermin.PmCard;
+import com.sptc.uilab.tokens.PaperMinimalistTokens;
 
 import org.delightofcomposition.SynthParameters;
 import org.delightofcomposition.envelopes.Envelope;
@@ -40,6 +45,8 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
     private TimbralPreview timbralPreview;
     private final ToggleSwitch dynamicsToggle;
     private final ToggleSwitch pitchToggle;
+    private JPanel densityCard, mixCard, dynamicsCard, pitchCard;
+    private boolean stacked = false;
 
     public EnvelopeEditorPanel(SynthParameters params) {
         this.params = params;
@@ -51,11 +58,16 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
         dynamicsEnvelope = envelopeToEditable(params.dynamicsEnv, true, false);
         pitchEnvelope = envelopeToEditable(params.pitchEnv, false, true);
 
-        densityCanvas = new EnvelopeCanvas(densityEnvelope, () -> Theme.ACCENT);
-        mixCanvas = new EnvelopeCanvas(mixEnvelope, () -> Theme.SUCCESS);
-        dynamicsCanvas = new EnvelopeCanvas(dynamicsEnvelope, () -> Theme.AMBER, true);
+        densityCanvas = new EnvelopeCanvas(densityEnvelope,
+                () -> Theme.isPaper() ? new Color(0x5A, 0x7A, 0x9A) : Theme.ACCENT);
+        mixCanvas = new EnvelopeCanvas(mixEnvelope,
+                () -> Theme.isPaper() ? new Color(0x5A, 0x8A, 0x6A) : Theme.SUCCESS);
+        dynamicsCanvas = new EnvelopeCanvas(dynamicsEnvelope,
+                () -> Theme.isPaper() ? new Color(0xD4, 0x85, 0x4A) : Theme.AMBER, true);
         pitchCanvas = new EnvelopeCanvas(pitchEnvelope,
-                () -> Theme.isSynthwave() ? Theme.SW_GREEN : Theme.DESTRUCTIVE, false, true);
+                () -> Theme.isSynthwave() ? Theme.SW_GREEN
+                    : Theme.isPaper() ? new Color(0x7A, 0x6A, 0x8A)
+                    : Theme.DESTRUCTIVE, false, true);
 
         // Dynamics toggle
         dynamicsToggle = new ToggleSwitch(params.useDynamicsEnv);
@@ -70,10 +82,20 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
             params.usePitchEnv = pitchToggle.isSelected();
         });
 
+        buildLayout();
+    }
+
+    private void buildLayout() {
+        // Clear accumulated canvas listeners from previous builds
+        densityCanvas.clearChangeListeners();
+        mixCanvas.clearChangeListeners();
+        dynamicsCanvas.clearChangeListeners();
+        pitchCanvas.clearChangeListeners();
+
         // Register help texts
         HelpManager help = HelpManager.getInstance();
         help.register(densityCanvas,
-                "Controls grain density over time. Click to add nodes, Ctrl-click to delete, Alt-click for flat lines. Drag nodes to reshape.");
+                "Ctrl-click to add/remove nodes. Drag nodes to move them. Drag a line segment to move both endpoints. Shift-drag a segment to curve it. Alt-click for flat lines.");
         help.register(mixCanvas,
                 "Controls the mix between granular texture (low) and original sample (high). Same editing controls as density envelope.");
         help.register(dynamicsCanvas,
@@ -85,33 +107,125 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
         help.register(pitchToggle,
                 "Enable or disable the pitch envelope. When off, grains play at their natural spectral frequency.");
 
-        java.awt.GridBagConstraints gbc = new java.awt.GridBagConstraints();
-        gbc.fill = java.awt.GridBagConstraints.BOTH;
-        gbc.weightx = 1.0;
-        gbc.weighty = 1.0;
-        gbc.insets = new java.awt.Insets(6, 6, 6, 6);
-
-        // Row 0: Density (left), Mix (right)
-        gbc.gridx = 0; gbc.gridy = 0;
-        add(buildEditorCard("Density",
+        // Build cards (store references for responsive relayout)
+        densityCard = buildEditorCard("Density",
                 "Grain density over time. Low = individual notes, High = dense spectrum.",
-                densityCanvas, densityEnvelope, null), gbc);
+                densityCanvas, densityEnvelope, null);
+        densityCard.setMinimumSize(new Dimension(350, 180));
 
-        gbc.gridx = 1; gbc.gridy = 0;
-        add(buildEditorCard("Mix",
+        mixCard = buildEditorCard("Mix",
                 "Mix between granular texture (0) and original sample (1).",
-                mixCanvas, mixEnvelope, null), gbc);
+                mixCanvas, mixEnvelope, null);
+        mixCard.setMinimumSize(new Dimension(350, 180));
 
-        // Row 1: Dynamics (left), Pitch (right)
-        gbc.gridx = 0; gbc.gridy = 1;
-        add(buildEditorCard("Dynamics",
+        dynamicsCard = buildEditorCard("Dynamics",
                 "Overall output amplitude over time.",
-                dynamicsCanvas, dynamicsEnvelope, dynamicsToggle), gbc);
+                dynamicsCanvas, dynamicsEnvelope, dynamicsToggle);
+        // Add dynamics-specific controls
+        JPanel dynOptions = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+        dynOptions.setOpaque(false);
 
-        gbc.gridx = 1; gbc.gridy = 1;
-        add(buildEditorCard("Pitch",
+        // Curve mode button
+        JButton curveBtn = Theme.ghostButton(params.dynamicsExponential ? "Exponential" : "Linear");
+        Theme.tagFont(curveBtn, "small");
+        curveBtn.setPreferredSize(new Dimension(90, 24));
+
+        // Apply mode button (visible only in chord mode)
+        JButton applyBtn = Theme.ghostButton(params.dynamicsPerVoice ? "Per-voice" : "Post-mix");
+        Theme.tagFont(applyBtn, "small");
+        applyBtn.setPreferredSize(new Dimension(80, 24));
+        applyBtn.addActionListener(e -> {
+            params.dynamicsPerVoice = !params.dynamicsPerVoice;
+            applyBtn.setText(params.dynamicsPerVoice ? "Per-voice" : "Post-mix");
+        });
+        applyBtn.setVisible(params.useChordMode);
+
+        // Exponent factor slider (hidden until exponential mode)
+        LabeledSlider exponentSlider = new LabeledSlider("Factor", 1, 2000,
+                (int) (params.dramaticFactor * 100),
+                v -> String.format("%.2f", v / 100.0));
+        exponentSlider.setPreferredSize(new Dimension(180, exponentSlider.getPreferredSize().height));
+        exponentSlider.setBorder(BorderFactory.createEmptyBorder(5, 0, 0, 0));
+        exponentSlider.addChangeListener(e ->
+                params.dramaticFactor = exponentSlider.getValue() / 100.0);
+        exponentSlider.setVisible(params.dynamicsExponential);
+
+        // Layout helper: arranges buttons + slider based on mode
+        Runnable relayout = () -> {
+            dynOptions.removeAll();
+            if (params.dynamicsExponential) {
+                // Exponential: stack buttons vertically on the left, slider on the right
+                JPanel btnCol = new JPanel();
+                btnCol.setLayout(new BoxLayout(btnCol, BoxLayout.Y_AXIS));
+                btnCol.setOpaque(false);
+                curveBtn.setMaximumSize(new Dimension(90, 24));
+                btnCol.add(curveBtn);
+                if (applyBtn.isVisible()) {
+                    applyBtn.setMaximumSize(new Dimension(90, 24));
+                    btnCol.add(Box.createVerticalStrut(2));
+                    btnCol.add(applyBtn);
+                }
+                dynOptions.add(btnCol);
+                dynOptions.add(exponentSlider);
+            } else {
+                // Linear: buttons side by side horizontally
+                dynOptions.add(curveBtn);
+                if (applyBtn.isVisible()) {
+                    dynOptions.add(applyBtn);
+                }
+            }
+            dynOptions.revalidate();
+            dynOptions.repaint();
+        };
+
+        curveBtn.addActionListener(e -> {
+            params.dynamicsExponential = !params.dynamicsExponential;
+            curveBtn.setText(params.dynamicsExponential ? "Exponential" : "Linear");
+            exponentSlider.setVisible(params.dynamicsExponential);
+            relayout.run();
+        });
+
+        // Poll chord mode state to show/hide apply button
+        javax.swing.Timer chordPoll = new javax.swing.Timer(200, e -> {
+            boolean shouldShow = params.useChordMode;
+            if (applyBtn.isVisible() != shouldShow) {
+                applyBtn.setVisible(shouldShow);
+                relayout.run();
+            }
+        });
+        chordPoll.start();
+
+        relayout.run(); // initial layout
+
+        help.register(curveBtn, "Linear: direct gain. Exponential: applies an exponential curve for more dramatic shaping.");
+        help.register(exponentSlider, "Controls the steepness of exponential shaping. Higher = more aggressive attack/decay contrast.");
+        help.register(applyBtn, "Post-mix: shapes the final output. Per-voice: shapes each chord voice independently before mixing.");
+
+        dynamicsCard.add(dynOptions, BorderLayout.SOUTH);
+        dynamicsCard.setMinimumSize(new Dimension(350, 180));
+
+        pitchCard = buildEditorCard("Pitch",
                 "Pitch shift over time. Center = no change, up = higher, down = lower.",
-                pitchCanvas, pitchEnvelope, pitchToggle), gbc);
+                pitchCanvas, pitchEnvelope, pitchToggle);
+        pitchCard.setMinimumSize(new Dimension(350, 180));
+
+        // Initial grid layout
+        layoutCards();
+
+        // Responsive: switch between 2x2 and 1-column on resize
+        addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                boolean shouldStack = getWidth() > 0 && getWidth() < 700;
+                if (shouldStack != stacked) {
+                    stacked = shouldStack;
+                    removeAll();
+                    layoutCards();
+                    revalidate();
+                    repaint();
+                }
+            }
+        });
 
         // Create timbral preview (displayed in WaveformDisplay, not here)
         timbralPreview = new TimbralPreview(densityEnvelope, mixEnvelope,
@@ -127,27 +241,61 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
         pitchCanvas.addChangeListener(e -> timbralPreview.repaint());
     }
 
+    private void layoutCards() {
+        java.awt.GridBagConstraints gbc = new java.awt.GridBagConstraints();
+        gbc.fill = java.awt.GridBagConstraints.BOTH;
+        gbc.weightx = 1.0;
+        gbc.weighty = 1.0;
+        gbc.insets = new java.awt.Insets(6, 6, 6, 6);
+
+        if (stacked) {
+            gbc.gridx = 0;
+            gbc.gridy = 0; add(densityCard, gbc);
+            gbc.gridy = 1; add(mixCard, gbc);
+            gbc.gridy = 2; add(dynamicsCard, gbc);
+            gbc.gridy = 3; add(pitchCard, gbc);
+        } else {
+            gbc.gridx = 0; gbc.gridy = 0; add(densityCard, gbc);
+            gbc.gridx = 1; gbc.gridy = 0; add(mixCard, gbc);
+            gbc.gridx = 0; gbc.gridy = 1; add(dynamicsCard, gbc);
+            gbc.gridx = 1; gbc.gridy = 1; add(pitchCard, gbc);
+        }
+    }
+
+    public void rebuild() {
+        removeAll();
+        buildLayout();
+        revalidate();
+        repaint();
+    }
+
     private JPanel buildEditorCard(String title, String helpText, EnvelopeCanvas canvas,
                                    Envelope envelope, JComponent titleExtra) {
-        JPanel card = new JPanel(new BorderLayout(0, 8)) {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                if (Theme.isSynthwave()) {
-                    SynthwavePainter.fillPanel(g2, 0, 0, getWidth(), getHeight(),
-                            Theme.BG_CARD, Theme.BG_CARD);
-                    SynthwavePainter.paintBevel(g2, 0, 0, getWidth(), getHeight(), true);
-                } else {
-                    g2.setColor(Theme.BG_CARD);
-                    g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
-                            Theme.RADIUS_LG, Theme.RADIUS_LG);
+        JPanel card;
+        if (Theme.isPaper()) {
+            card = new PmCard(PmCard.Variant.FLAT);
+        } else {
+            card = new JPanel() {
+                @Override
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    if (Theme.isSynthwave()) {
+                        SynthwavePainter.fillPanel(g2, 0, 0, getWidth(), getHeight(),
+                                Theme.BG_CARD, Theme.BG_CARD);
+                        SynthwavePainter.paintBevel(g2, 0, 0, getWidth(), getHeight(), true);
+                    } else {
+                        g2.setColor(Theme.BG_CARD);
+                        g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
+                                Theme.RADIUS_LG, Theme.RADIUS_LG);
+                    }
+                    g2.dispose();
                 }
-                g2.dispose();
-            }
-        };
+            };
+            card.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
+        }
+        card.setLayout(new BorderLayout(0, 8));
         card.setOpaque(false);
-        card.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
 
         // Header with title + buttons
         JPanel header = new JPanel(new BorderLayout());
@@ -158,15 +306,28 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
 
         JPanel titleRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         titleRow.setOpaque(false);
-        titleRow.add(Theme.sectionLabel(title));
+
+        if (Theme.isPaper()) {
+            JLabel titleLabel = new JLabel(title.toUpperCase());
+            Theme.tagFont(titleLabel, "title");
+            titleLabel.setForeground(PaperMinimalistTokens.INK);
+            titleRow.add(titleLabel);
+        } else {
+            titleRow.add(Theme.sectionLabel(title));
+        }
         if (titleExtra != null) {
             titleRow.add(titleExtra);
         }
         titleArea.add(titleRow, BorderLayout.NORTH);
 
         JLabel helpLabel = new JLabel(helpText);
-        Theme.tagFont(helpLabel, "small");
-        Theme.tagFg(helpLabel, "fgDim");
+        if (Theme.isPaper()) {
+            helpLabel.setFont(PaperMinimalistTokens.FONT_BODY_XS);
+            helpLabel.setForeground(PaperMinimalistTokens.INK_GHOST);
+        } else {
+            Theme.tagFont(helpLabel, "small");
+            Theme.tagFg(helpLabel, "fgDim");
+        }
         helpLabel.setBorder(BorderFactory.createEmptyBorder(3, 5, 0, 0));
         titleArea.add(helpLabel, BorderLayout.SOUTH);
         header.add(titleArea, BorderLayout.CENTER);
@@ -175,27 +336,69 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
         JPanel buttonBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         buttonBar.setOpaque(false);
 
-        JButton resetBtn = Theme.ghostButton("Reset");
-        Theme.tagFont(resetBtn, "small");
-        resetBtn.setPreferredSize(new Dimension(58, 26));
-        resetBtn.addActionListener(e -> canvas.reset());
+        if (Theme.isPaper()) {
+            PmButton resetBtn = new PmButton("Reset", PmButton.Variant.GHOST).small();
+            resetBtn.addActionListener(e -> canvas.reset());
+            resetBtn.setPreferredSize(new Dimension(58, 26));
 
-        JButton undoBtn = Theme.ghostButton("Undo");
-        Theme.tagFont(undoBtn, "small");
-        undoBtn.setPreferredSize(new Dimension(52, 26));
-        undoBtn.setEnabled(false);
-        undoBtn.addActionListener(e -> {
-            canvas.undo();
-            undoBtn.setEnabled(canvas.canUndo());
-        });
-        canvas.addChangeListener(e -> undoBtn.setEnabled(canvas.canUndo()));
+            PmButton undoBtn = new PmButton("Undo", PmButton.Variant.GHOST).small();
+            undoBtn.setComponentEnabled(false);
+            undoBtn.addActionListener(e -> {
+                canvas.undo();
+                undoBtn.setComponentEnabled(canvas.canUndo());
+            });
+            canvas.addChangeListener(e -> undoBtn.setComponentEnabled(canvas.canUndo()));
+            undoBtn.setPreferredSize(new Dimension(52, 26));
 
-        HelpManager help = HelpManager.getInstance();
-        help.register(resetBtn, "Reset this envelope to its default shape.");
-        help.register(undoBtn, "Undo the last edit to this envelope.");
+            if (canvas.pitchMode) {
+                PmButton snapBtn = new PmButton("Snap", PmButton.Variant.GHOST).small();
+                snapBtn.setPreferredSize(new Dimension(52, 26));
+                snapBtn.addActionListener(e -> {
+                    canvas.setSnapToGrid(!canvas.isSnapToGrid());
+                    snapBtn.setText(canvas.isSnapToGrid() ? "Snap \u2713" : "Snap");
+                });
+                buttonBar.add(snapBtn);
+            }
 
-        buttonBar.add(resetBtn);
-        buttonBar.add(undoBtn);
+            buttonBar.add(resetBtn);
+            buttonBar.add(undoBtn);
+        } else {
+            JButton resetBtn = Theme.ghostButton("Reset");
+            Theme.tagFont(resetBtn, "small");
+            resetBtn.setPreferredSize(new Dimension(58, 26));
+            resetBtn.addActionListener(e -> canvas.reset());
+
+            JButton undoBtn = Theme.ghostButton("Undo");
+            Theme.tagFont(undoBtn, "small");
+            undoBtn.setPreferredSize(new Dimension(52, 26));
+            undoBtn.setEnabled(false);
+            undoBtn.addActionListener(e -> {
+                canvas.undo();
+                undoBtn.setEnabled(canvas.canUndo());
+            });
+            canvas.addChangeListener(e -> undoBtn.setEnabled(canvas.canUndo()));
+
+            HelpManager help = HelpManager.getInstance();
+            help.register(resetBtn, "Reset this envelope to its default shape.");
+            help.register(undoBtn, "Undo the last edit to this envelope.");
+
+            // Snap button (pitch envelope only)
+            if (canvas.pitchMode) {
+                JButton snapBtn = Theme.ghostButton("Snap");
+                Theme.tagFont(snapBtn, "small");
+                snapBtn.setPreferredSize(new Dimension(52, 26));
+                snapBtn.addActionListener(e -> {
+                    canvas.setSnapToGrid(!canvas.isSnapToGrid());
+                    snapBtn.setText(canvas.isSnapToGrid() ? "Snap \u2713" : "Snap");
+                });
+                help.register(snapBtn, "Snap nodes to exact semitone pitches.");
+                buttonBar.add(snapBtn);
+            }
+
+            buttonBar.add(resetBtn);
+            buttonBar.add(undoBtn);
+        }
+
         header.add(buttonBar, BorderLayout.EAST);
         card.add(header, BorderLayout.NORTH);
 
@@ -205,7 +408,14 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                if (Theme.isSynthwave()) {
+                if (Theme.isPaper()) {
+                    g2.setColor(PaperMinimalistTokens.PAPER_WARM);
+                    g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
+                            PaperMinimalistTokens.RADIUS_SM, PaperMinimalistTokens.RADIUS_SM);
+                    g2.setColor(PaperMinimalistTokens.BORDER_FAINT);
+                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
+                            PaperMinimalistTokens.RADIUS_SM, PaperMinimalistTokens.RADIUS_SM);
+                } else if (Theme.isSynthwave()) {
                     SynthwavePainter.fillPanel(g2, 0, 0, getWidth(), getHeight(),
                             Theme.BG_INPUT, Theme.BORDER_SUBTLE);
                 } else {
@@ -235,25 +445,33 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
         Envelope env = new Envelope();
         env.type = 1;
         env.coords = new ArrayList<>();
+        env.segmentCurves = new ArrayList<>();
 
         if (src.times != null && src.times.length > 0) {
             for (int i = 0; i < src.times.length; i++) {
                 int x = (int) (src.times[i] * EnvelopeCanvas.COORD_X_MAX);
                 int y = convertValueToCoord(src.values[i], dbMode, pitchMode);
                 env.coords.add(new int[]{x, y});
+                double curve = (src.curves != null && i < src.curves.length) ? src.curves[i] : 0.0;
+                env.segmentCurves.add(curve);
             }
         } else {
-            int defaultY = pitchMode ? 250 : 500; // pitch center = no change, others = zero
+            int defaultY = pitchMode ? 250 : 500;
             env.coords.add(new int[]{0, defaultY});
             env.coords.add(new int[]{EnvelopeCanvas.COORD_X_MAX, defaultY});
+            env.segmentCurves.add(0.0);
+            env.segmentCurves.add(0.0);
         }
 
-        env.times = new double[env.coords.size()];
-        env.values = new double[env.coords.size()];
-        for (int i = 0; i < env.coords.size(); i++) {
+        int n = env.coords.size();
+        env.times = new double[n];
+        env.values = new double[n];
+        env.curves = new double[n];
+        for (int i = 0; i < n; i++) {
             int[] coord = env.coords.get(i);
             env.times[i] = coord[0] / (double) EnvelopeCanvas.COORD_X_MAX;
             env.values[i] = convertCoordToValue(coord[1], dbMode, pitchMode);
+            env.curves[i] = env.segmentCurves.get(i);
         }
         return env;
     }
@@ -338,31 +556,40 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
     }
 
     private static Envelope cloneWithData(Envelope src, boolean dbMode, boolean pitchMode) {
-        double[] times = new double[src.coords.size()];
-        double[] values = new double[src.coords.size()];
-        for (int i = 0; i < src.coords.size(); i++) {
+        int n = src.coords.size();
+        double[] times = new double[n];
+        double[] values = new double[n];
+        double[] curves = new double[n];
+        for (int i = 0; i < n; i++) {
             int[] coord = src.coords.get(i);
             times[i] = coord[0] / (double) EnvelopeCanvas.COORD_X_MAX;
             values[i] = convertCoordToValue(coord[1], dbMode, pitchMode);
+            curves[i] = (i < src.segmentCurves.size()) ? src.segmentCurves.get(i) : 0.0;
         }
-        return new Envelope(times, values);
+        return new Envelope(times, values, curves);
     }
 
     private static void copyEnvelopeData(Envelope src, Envelope dst, boolean dbMode, boolean pitchMode) {
         dst.coords = new ArrayList<>();
+        dst.segmentCurves = new ArrayList<>();
         if (src.times != null) {
             for (int i = 0; i < src.times.length; i++) {
                 int x = (int) (src.times[i] * EnvelopeCanvas.COORD_X_MAX);
                 int y = convertValueToCoord(src.values[i], dbMode, pitchMode);
                 dst.coords.add(new int[]{x, y});
+                double curve = (src.curves != null && i < src.curves.length) ? src.curves[i] : 0.0;
+                dst.segmentCurves.add(curve);
             }
         }
-        dst.times = new double[dst.coords.size()];
-        dst.values = new double[dst.coords.size()];
-        for (int i = 0; i < dst.coords.size(); i++) {
+        int n = dst.coords.size();
+        dst.times = new double[n];
+        dst.values = new double[n];
+        dst.curves = new double[n];
+        for (int i = 0; i < n; i++) {
             int[] coord = dst.coords.get(i);
             dst.times[i] = coord[0] / (double) EnvelopeCanvas.COORD_X_MAX;
             dst.values[i] = convertCoordToValue(coord[1], dbMode, pitchMode);
+            dst.curves[i] = dst.segmentCurves.get(i);
         }
     }
 

@@ -40,6 +40,11 @@ public class SynthParameters {
     public double panSmoothing = 0.5;
     public double crossfadeDuration = 0.5;
     public double dramaticFactor = 0.01;
+    public boolean usePalindrome = false;
+
+    // Dynamics envelope options
+    public boolean dynamicsExponential = false;
+    public boolean dynamicsPerVoice = false;
 
     // Chord mode
     public boolean useChordMode = false;
@@ -48,10 +53,10 @@ public class SynthParameters {
 
     // Envelopes
     public Envelope probEnv = new Envelope(
-            new double[]{0, 0.6, 0.8, 0.9, 0.91},
+            new double[]{0, 0.6, 0.8, 0.9, 1.0},
             new double[]{0, 0.1, 1, 1, 0});
     public Envelope mixEnv = new Envelope(
-            new double[]{0, 0.7, 0.9},
+            new double[]{0, 0.7, 1.0},
             new double[]{0, 0, 1});
     public Envelope dramaticEnvShape = new Envelope(
             new double[]{0, 0.25, 1},
@@ -59,10 +64,10 @@ public class SynthParameters {
 
     // For crisp attack mode in chord voices
     public Envelope crispProbEnv = new Envelope(
-            new double[]{0, 0.1, 0.6, 0.8, 0.9, 0.91},
+            new double[]{0, 0.1, 0.6, 0.8, 0.9, 1.0},
             new double[]{1, 0.05, 0.1, 1, 1, 0});
     public Envelope crispMixEnv = new Envelope(
-            new double[]{0, 0.7, 0.9},
+            new double[]{0, 0.7, 1.0},
             new double[]{0, 0, 1});
     public Envelope dynamicsEnv = new Envelope(
             new double[]{0, 1.0},
@@ -101,6 +106,9 @@ public class SynthParameters {
         copy.panSmoothing = this.panSmoothing;
         copy.crossfadeDuration = this.crossfadeDuration;
         copy.dramaticFactor = this.dramaticFactor;
+        copy.usePalindrome = this.usePalindrome;
+        copy.dynamicsExponential = this.dynamicsExponential;
+        copy.dynamicsPerVoice = this.dynamicsPerVoice;
         copy.useChordMode = this.useChordMode;
         copy.chordRatios = Arrays.copyOf(this.chordRatios, this.chordRatios.length);
         copy.chordAttackTimes = Arrays.copyOf(this.chordAttackTimes, this.chordAttackTimes.length);
@@ -117,8 +125,11 @@ public class SynthParameters {
     }
 
     private static Envelope cloneEnvelope(Envelope env) {
+        double[] curvesCopy = env.curves != null
+                ? Arrays.copyOf(env.curves, env.curves.length) : null;
         return new Envelope(
                 Arrays.copyOf(env.times, env.times.length),
-                Arrays.copyOf(env.values, env.values.length));
+                Arrays.copyOf(env.values, env.values.length),
+                curvesCopy);
     }
 }

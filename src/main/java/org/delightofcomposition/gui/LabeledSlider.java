@@ -6,6 +6,7 @@ import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.Shape;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -15,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.IntFunction;
 
+import com.sptc.uilab.tokens.PaperMinimalistTokens;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JComponent;
@@ -32,6 +34,23 @@ public class LabeledSlider extends JPanel {
     private static final int TRACK_H = 6;
     private static final int THUMB_SIZE = 18;
     private static final int GAP = 4;
+
+    private static final float[][] BAYER8 = new float[8][8];
+    static {
+        int[][] raw = {
+            { 0, 32,  8, 40,  2, 34, 10, 42},
+            {48, 16, 56, 24, 50, 18, 58, 26},
+            {12, 44,  4, 36, 14, 46,  6, 38},
+            {60, 28, 52, 20, 62, 30, 54, 22},
+            { 3, 35, 11, 43,  1, 33,  9, 41},
+            {51, 19, 59, 27, 49, 17, 57, 25},
+            {15, 47,  7, 39, 13, 45,  5, 37},
+            {63, 31, 55, 23, 61, 29, 53, 21}
+        };
+        for (int y = 0; y < 8; y++)
+            for (int x = 0; x < 8; x++)
+                BAYER8[y][x] = raw[y][x] / 64f;
+    }
 
     private static int headerH() { return Theme.isSynthwave() ? 26 : 18; }
     private static int sliderAreaH() { return Theme.isSynthwave() ? 34 : 30; }
@@ -200,6 +219,47 @@ public class LabeledSlider extends JPanel {
                 SynthwavePainter.fillPanel(g2, thumbX, thumbY, THUMB_SIZE, THUMB_SIZE,
                         Theme.SW_LAVENDER, Theme.SW_PURPLE);
                 SynthwavePainter.paintBevel(g2, thumbX, thumbY, THUMB_SIZE, THUMB_SIZE, true);
+            } else if (Theme.isPaper()) {
+                // Paper: dithered track gradient (sparse left → dense right)
+                g2.setColor(Theme.BG_MUTED);
+                g2.fillRoundRect(padX, trackY, trackW, TRACK_H, TRACK_H, TRACK_H);
+
+                if (fillW > 0) {
+                    java.awt.Color dark = new java.awt.Color(0x55, 0x55, 0x55);
+                    java.awt.Color mid  = new java.awt.Color(0x99, 0x99, 0x99);
+                    Shape oldClip = g2.getClip();
+                    g2.setClip(new java.awt.geom.RoundRectangle2D.Float(padX, trackY, fillW, TRACK_H, TRACK_H, TRACK_H));
+                    for (int py = trackY; py < trackY + TRACK_H; py++) {
+                        for (int px = padX; px < padX + fillW; px++) {
+                            float intensity = (float)(px - padX) / Math.max(1, fillW + trackW);
+                            int bx = ((int)((px - padX) / 1.5)) & 7;
+                            int by = ((int)((py - trackY) / 1.5)) & 7;
+                            float threshold = BAYER8[by][bx];
+                            // 2-shade dither: transparent → mid → dark (left to right)
+                            float shadePos = intensity * 2f;
+                            if (shadePos < 1f) {
+                                if (shadePos > threshold) {
+                                    g2.setColor(mid);
+                                    g2.fillRect(px, py, 1, 1);
+                                }
+                            } else {
+                                g2.setColor((shadePos - 1f) > threshold ? dark : mid);
+                                g2.fillRect(px, py, 1, 1);
+                            }
+                        }
+                    }
+                    g2.setClip(oldClip);
+                }
+
+                // Thumb matching envelope node style
+                int paperThumb = 8;
+                int thumbX = padX + fillW - paperThumb / 2;
+                int thumbY = (h - paperThumb) / 2;
+                g2.setColor(PaperMinimalistTokens.PAPER);
+                g2.fillOval(thumbX, thumbY, paperThumb, paperThumb);
+                g2.setStroke(new BasicStroke(PaperMinimalistTokens.BORDER_WIDTH));
+                g2.setColor(PaperMinimalistTokens.INK);
+                g2.drawOval(thumbX, thumbY, paperThumb - 1, paperThumb - 1);
             } else {
                 // Standard rounded track
                 g2.setColor(Theme.BG_MUTED);
@@ -222,7 +282,7 @@ public class LabeledSlider extends JPanel {
             }
 
             // Focus ring
-            if (isFocusOwner() && !Theme.isSynthwave()) {
+            if (isFocusOwner() && !Theme.isSynthwave() && !Theme.isPaper()) {
                 g2.setColor(Theme.RING);
                 g2.setStroke(new BasicStroke(2f));
                 if (Theme.isSynthwave()) {

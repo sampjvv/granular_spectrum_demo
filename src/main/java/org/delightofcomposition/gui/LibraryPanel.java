@@ -30,6 +30,49 @@ import org.delightofcomposition.sound.AudioPlayer;
 public class LibraryPanel extends JPanel {
 
     private static final int WIDTH = 290;
+
+    private static final float[][] BAYER8 = new float[8][8];
+    static {
+        int[][] raw = {
+            { 0, 32,  8, 40,  2, 34, 10, 42},
+            {48, 16, 56, 24, 50, 18, 58, 26},
+            {12, 44,  4, 36, 14, 46,  6, 38},
+            {60, 28, 52, 20, 62, 30, 54, 22},
+            { 3, 35, 11, 43,  1, 33,  9, 41},
+            {51, 19, 59, 27, 49, 17, 57, 25},
+            {15, 47,  7, 39, 13, 45,  5, 37},
+            {63, 31, 55, 23, 61, 29, 53, 21}
+        };
+        for (int y = 0; y < 8; y++)
+            for (int x = 0; x < 8; x++)
+                BAYER8[y][x] = raw[y][x] / 64f;
+    }
+
+    private static java.awt.image.BufferedImage renderPaperCardGradient(int w, int h, int r) {
+        var img = new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        java.awt.Graphics2D ig = img.createGraphics();
+        ig.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+        ig.setClip(new java.awt.geom.RoundRectangle2D.Float(0, 0, w - 1, h - 1, r, r));
+        java.awt.Color warm = com.sptc.uilab.tokens.PaperMinimalistTokens.PAPER_DARK;
+        java.awt.Color light = com.sptc.uilab.tokens.PaperMinimalistTokens.PAPER;
+        float slope = 0.1f;
+        float reach = (w * slope + h) * 0.3f;
+        float scale = 1.0f / reach;
+        for (int py = 0; py < h; py++) {
+            for (int px = 0; px < w; px++) {
+                float dTL = (px * slope + py);
+                float dBR = ((w - px) * slope + (h - py));
+                float dMin = Math.min(dTL, dBR) * scale;
+                float t = Math.min(1f, Math.max(0f, dMin - 0.175f) * 3.0f);
+                int bx = ((int)(px / 1.5)) & 7;
+                int by = ((int)(py / 1.5)) & 7;
+                ig.setColor(t > BAYER8[by][bx] ? light : warm);
+                ig.fillRect(px, py, 1, 1);
+            }
+        }
+        ig.dispose();
+        return img;
+    }
     private static final SimpleDateFormat DATE_FMT = new SimpleDateFormat("MMM d, yyyy  h:mm a");
 
     private final AudioPlayer libraryPlayer = new AudioPlayer();
@@ -123,6 +166,8 @@ public class LibraryPanel extends JPanel {
 
     private JPanel buildEntryCard(SoundLibrary.LibraryEntry entry, boolean isRender) {
         JPanel card = new JPanel(new BorderLayout(0, 4)) {
+            private java.awt.image.BufferedImage bgCache;
+            private int cW, cH;
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -130,6 +175,17 @@ public class LibraryPanel extends JPanel {
                 if (Theme.isSynthwave()) {
                     SynthwavePainter.fillPanel(g2, 0, 0, getWidth(), getHeight(),
                             Theme.BG_CARD, Theme.BORDER_SUBTLE);
+                } else if (Theme.isPaper()) {
+                    int w = getWidth(), h = getHeight(), r = Theme.RADIUS;
+                    if (bgCache == null || cW != w || cH != h) {
+                        bgCache = renderPaperCardGradient(w, h, r);
+                        cW = w; cH = h;
+                    }
+                    g2.drawImage(bgCache, 0, 0, null);
+                    g2.setStroke(new java.awt.BasicStroke(
+                            com.sptc.uilab.tokens.PaperMinimalistTokens.BORDER_WIDTH));
+                    g2.setColor(com.sptc.uilab.tokens.PaperMinimalistTokens.INK);
+                    g2.drawRoundRect(0, 0, w - 1, h - 1, r, r);
                 } else {
                     g2.setColor(Theme.BG_CARD);
                     g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1,

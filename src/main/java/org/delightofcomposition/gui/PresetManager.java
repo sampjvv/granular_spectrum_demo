@@ -31,6 +31,9 @@ public class PresetManager {
         props.setProperty("panSmoothing", String.valueOf(params.panSmoothing));
         props.setProperty("crossfadeDuration", String.valueOf(params.crossfadeDuration));
         props.setProperty("dramaticFactor", String.valueOf(params.dramaticFactor));
+        props.setProperty("usePalindrome", String.valueOf(params.usePalindrome));
+        props.setProperty("dynamicsExponential", String.valueOf(params.dynamicsExponential));
+        props.setProperty("dynamicsPerVoice", String.valueOf(params.dynamicsPerVoice));
         props.setProperty("useChordMode", String.valueOf(params.useChordMode));
         props.setProperty("chordRatios", arrayToString(params.chordRatios));
         props.setProperty("chordAttackTimes", arrayToString(params.chordAttackTimes));
@@ -90,6 +93,12 @@ public class PresetManager {
                 props.getProperty("crossfadeDuration", String.valueOf(params.crossfadeDuration)));
         params.dramaticFactor = Double.parseDouble(
                 props.getProperty("dramaticFactor", String.valueOf(params.dramaticFactor)));
+        params.usePalindrome = Boolean.parseBoolean(
+                props.getProperty("usePalindrome", "false"));
+        params.dynamicsExponential = Boolean.parseBoolean(
+                props.getProperty("dynamicsExponential", "false"));
+        params.dynamicsPerVoice = Boolean.parseBoolean(
+                props.getProperty("dynamicsPerVoice", "false"));
         params.useChordMode = Boolean.parseBoolean(
                 props.getProperty("useChordMode", String.valueOf(params.useChordMode)));
         params.chordRatios = parseDoubleArray(
@@ -113,6 +122,13 @@ public class PresetManager {
         if (env.times == null) return;
         props.setProperty(prefix + ".times", arrayToString(env.times));
         props.setProperty(prefix + ".values", arrayToString(env.values));
+        if (env.curves != null) {
+            boolean hasNonZero = false;
+            for (double c : env.curves) { if (c != 0.0) { hasNonZero = true; break; } }
+            if (hasNonZero) {
+                props.setProperty(prefix + ".curves", arrayToString(env.curves));
+            }
+        }
     }
 
     private static Envelope loadEnvelope(Properties props, String prefix, Envelope fallback) {
@@ -122,6 +138,11 @@ public class PresetManager {
         try {
             double[] times = parseDoubleArray(timesStr);
             double[] values = parseDoubleArray(valuesStr);
+            String curvesStr = props.getProperty(prefix + ".curves");
+            if (curvesStr != null) {
+                double[] curves = parseDoubleArray(curvesStr);
+                return new Envelope(times, values, curves);
+            }
             return new Envelope(times, values);
         } catch (Exception e) {
             return fallback;

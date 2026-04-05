@@ -4,10 +4,13 @@ import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Dimension;
+import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+
+import com.sptc.uilab.tokens.PaperMinimalistTokens;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -158,6 +161,35 @@ public class SegmentedControl extends JComponent {
                 int segX = INSET + i * segW;
                 boolean active = i == selectedIndex;
                 g2.setColor(active ? Theme.BG : Theme.FG_MUTED);
+                int tx = segX + (segW - fm.stringWidth(labels[i])) / 2;
+                int ty = (h + fm.getAscent() - fm.getDescent()) / 2;
+                g2.drawString(labels[i], tx, ty);
+            }
+        } else if (Theme.isPaper()) {
+            // Paper Minimalist: ink-on-paper pill tabs
+            int radius = h;
+
+            g2.setColor(PaperMinimalistTokens.PAPER_WARM);
+            g2.fillRoundRect(0, 0, w, h, radius, radius);
+
+            int innerW = w - INSET * 2;
+            int segW = innerW / labels.length;
+            int segH = h - INSET * 2;
+            int segRadius = segH;
+
+            // Active segment: ink pill
+            int activeX = INSET + (int) (animPos * segW);
+            g2.setColor(PaperMinimalistTokens.INK);
+            g2.fillRoundRect(activeX, INSET, segW, segH, segRadius, segRadius);
+
+            // Labels
+            Font paperFont = PaperMinimalistTokens.FONT_BODY_XS;
+            FontMetrics fm = g2.getFontMetrics(paperFont);
+            g2.setFont(paperFont);
+            for (int i = 0; i < labels.length; i++) {
+                int segX = INSET + i * segW;
+                boolean active = i == selectedIndex;
+                g2.setColor(active ? PaperMinimalistTokens.PAPER : PaperMinimalistTokens.INK_FAINT);
                 int tx = segX + (segW - fm.stringWidth(labels[i])) / 2;
                 int ty = (h + fm.getAscent() - fm.getDescent()) / 2;
                 g2.drawString(labels[i], tx, ty);

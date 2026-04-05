@@ -19,9 +19,15 @@ import javax.swing.JTextField;
 import javax.swing.Scrollable;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 
 import javax.swing.SwingWorker;
+
+import com.sptc.uilab.papermin.PmCard;
+import com.sptc.uilab.papermin.PmTabs;
+import com.sptc.uilab.tokens.PaperMinimalistTokens;
 
 import org.delightofcomposition.SynthParameters;
 import org.delightofcomposition.sound.AudioPlayer;
@@ -38,31 +44,30 @@ public class ParameterPanel extends JPanel implements Scrollable {
     private static final AudioPlayer previewPlayer = new AudioPlayer();
 
     private final SynthParameters params;
+    private final List<Runnable> syncActions = new ArrayList<>();
     private JButton currentPreviewBtn;
 
     private SampleDropPanel sourceDropPanel;
     private SampleDropPanel grainDropPanel;
     private SampleDropPanel irDropPanel;
     private StepperControl refFreqStepper;
-    private SegmentedControl windowSizeSegmented;
-    private StepperControl controlRateStepper;
-    private StepperControl grainsPerPeakStepper;
-    private LabeledSlider ampThresholdSlider;
-    private ToggleSwitch useReverbToggle;
-    private LabeledSlider sourceReverbSlider;
-    private LabeledSlider synthReverbSlider;
-    private LabeledSlider panSmoothSlider;
-    private StepperControl crossfadeStepper;
-    private LabeledSlider dramaticSlider;
-    private ToggleSwitch chordEnableToggle;
-    private JTextField chordRatiosField;
-    private JTextField chordAttacksField;
     private Consumer<File> sourceFileChangeListener;
 
     public ParameterPanel(SynthParameters params) {
         this.params = params;
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+
+        buildControls();
+
+        // Auto-detect grain pitch on startup if a grain sample is already loaded
+        if (params.grainFile != null && params.grainFile.exists()) {
+            detectGrainPitch(params.grainFile);
+        }
+    }
+
+    private void buildControls() {
+        syncActions.clear();
 
         add(buildSamplesSection());
         add(Box.createVerticalStrut(Theme.SECTION_GAP));
@@ -76,11 +81,14 @@ public class ParameterPanel extends JPanel implements Scrollable {
         add(Box.createVerticalGlue());
 
         registerHelpTexts();
+    }
 
-        // Auto-detect grain pitch on startup if a grain sample is already loaded
-        if (params.grainFile != null && params.grainFile.exists()) {
-            detectGrainPitch(params.grainFile);
-        }
+    public void rebuild() {
+        removeAll();
+        buildControls();
+        syncFromParams();
+        revalidate();
+        repaint();
     }
 
     private void registerHelpTexts() {
@@ -89,28 +97,29 @@ public class ParameterPanel extends JPanel implements Scrollable {
         help.register(grainDropPanel, "The short audio sample used as the building block for granular synthesis. Its timbre colors the output.");
         help.register(irDropPanel, "An impulse response recording used for convolution reverb, placing the sound in a virtual space.");
         help.register(refFreqStepper, "The fundamental frequency (Hz) of the grain sample. Used to tune grains to match spectral peaks.");
-        help.register(windowSizeSegmented, "FFT window size: larger = better frequency resolution but smears timing. Smaller = better timing but coarser frequency.");
-        help.register(controlRateStepper, "Time between analysis windows. Lower = more detail but longer render. Higher = faster but less smooth.");
-        help.register(grainsPerPeakStepper, "How many grain copies per spectral peak. More = denser/richer texture, fewer = sparser/clearer.");
-        help.register(ampThresholdSlider, "Minimum amplitude for a spectral peak to trigger grains. Higher = only loud peaks, lower = more detail.");
-        help.register(useReverbToggle, "Apply convolution reverb using the impulse response sample to add spatial depth.");
-        help.register(sourceReverbSlider, "How much reverb to apply to the original source audio portion of the mix.");
-        help.register(synthReverbSlider, "How much reverb to apply to the granular synthesized portion of the mix.");
-        help.register(panSmoothSlider, "Smooths stereo panning changes over time. Higher = gentler panning, lower = more dramatic movement.");
-        help.register(crossfadeStepper, "Duration of the crossfade between source and synth audio at the mix transition point.");
-        help.register(dramaticSlider, "Exaggerates amplitude differences between spectral peaks. Higher = more contrast, lower = flatter.");
-        help.register(chordEnableToggle, "Render multiple transposed copies of the synthesis to build a just-intonation chord.");
-        help.register(chordRatiosField, "Frequency ratios for chord voices. E.g. '1, 3, 5' creates a just major triad (fundamental, 3rd harmonic, 5th harmonic).");
-        help.register(chordAttacksField, "Stagger the entry of each chord voice by these times in seconds. E.g. '0, 3, 4' for a gradual build.");
     }
 
     // ── Section builders ──
 
     private JPanel buildSamplesSection() {
-        JPanel card = sectionCard();
+        JPanel card;
+        JPanel content;
 
-        card.add(Theme.sectionHeader("Samples"));
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        if (Theme.isPaper()) {
+            PmCard pmCard = new PmCard(PmCard.Variant.DEFAULT);
+            content = new JPanel();
+            content.setOpaque(false);
+            content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+            content.add(paperSectionHeader("Samples"));
+            content.add(Box.createVerticalStrut(8));
+            pmCard.add(content, BorderLayout.CENTER);
+            card = pmCard;
+        } else {
+            card = sectionCard();
+            content = card;
+            content.add(Theme.sectionHeader("Samples"));
+            content.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        }
 
         sourceDropPanel = new SampleDropPanel("Source Sample", params.sourceFile,
                 file -> {
@@ -118,8 +127,9 @@ public class ParameterPanel extends JPanel implements Scrollable {
                     SamplePreferences.saveSourceFile(file);
                     if (sourceFileChangeListener != null) sourceFileChangeListener.accept(file);
                 });
-        card.add(sampleRow(sourceDropPanel));
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        content.add(sampleRow(sourceDropPanel));
+        content.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        syncActions.add(() -> sourceDropPanel.setFile(params.sourceFile));
 
         grainDropPanel = new SampleDropPanel("Grain Sample", params.grainFile,
                 file -> {
@@ -127,201 +137,273 @@ public class ParameterPanel extends JPanel implements Scrollable {
                     SamplePreferences.saveGrainFile(file);
                     detectGrainPitch(file);
                 });
-        card.add(sampleRow(grainDropPanel));
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        content.add(sampleRow(grainDropPanel));
+        content.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        syncActions.add(() -> grainDropPanel.setFile(params.grainFile));
 
-        JLabel refLabel = Theme.paramLabel("Reference Frequency");
+        JLabel refLabel = Theme.isPaper() ? paperLabel("Reference Frequency") : Theme.paramLabel("Reference Frequency");
         refLabel.setAlignmentX(0);
-        card.add(refLabel);
-        card.add(Box.createVerticalStrut(Theme.LABEL_GAP));
+        content.add(refLabel);
+        content.add(Box.createVerticalStrut(Theme.LABEL_GAP));
         refFreqStepper = new StepperControl(params.grainReferenceFreq, 20, 20000, 0.1, "%.1f Hz");
         refFreqStepper.setAlignmentX(0);
         refFreqStepper.addChangeListener(e -> params.grainReferenceFreq = refFreqStepper.getDoubleValue());
-
-        card.add(refFreqStepper);
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        content.add(refFreqStepper);
+        content.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        syncActions.add(() -> refFreqStepper.setValue(params.grainReferenceFreq));
 
         irDropPanel = new SampleDropPanel("Impulse Response", params.impulseResponseFile,
                 file -> {
                     params.impulseResponseFile = file;
                     SamplePreferences.saveImpulseResponseFile(file);
                 });
-        card.add(sampleRow(irDropPanel));
+        content.add(sampleRow(irDropPanel));
+        syncActions.add(() -> irDropPanel.setFile(params.impulseResponseFile));
 
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
         return card;
     }
 
     private JPanel buildSynthesisSection() {
-        JPanel card = sectionCard();
+        JPanel card;
+        JPanel content;
 
-        card.add(Theme.sectionHeader("Synthesis"));
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        if (Theme.isPaper()) {
+            PmCard pmCard = new PmCard(PmCard.Variant.DEFAULT);
+            content = new JPanel();
+            content.setOpaque(false);
+            content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+            content.add(paperSectionHeader("Synthesis"));
+            content.add(Box.createVerticalStrut(8));
+            pmCard.add(content, BorderLayout.CENTER);
+            card = pmCard;
+        } else {
+            card = sectionCard();
+            content = card;
+            content.add(Theme.sectionHeader("Synthesis"));
+            content.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        }
 
-        JLabel winLabel = Theme.paramLabel("Window Size");
+        JLabel winLabel = Theme.isPaper() ? paperLabel("Window Size") : Theme.paramLabel("Window Size");
         winLabel.setAlignmentX(0);
-        card.add(winLabel);
-        card.add(Box.createVerticalStrut(Theme.LABEL_GAP));
+        content.add(winLabel);
+        content.add(Box.createVerticalStrut(Theme.LABEL_GAP));
+
         String[] windowLabels = {"1K", "2K", "4K", "8K", "16K", "32K", "64K"};
-        windowSizeSegmented = new SegmentedControl(windowLabels, params.windowSizeExponent - 10);
-        windowSizeSegmented.setAlignmentX(0);
-        windowSizeSegmented.addChangeListener(e ->
-                params.windowSizeExponent = windowSizeSegmented.getSelectedIndex() + 10);
 
-        card.add(windowSizeSegmented);
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        if (Theme.isPaper()) {
+            PmTabs pmTabs = new PmTabs(windowLabels);
+            pmTabs.setSelectedIndex(params.windowSizeExponent - 10);
+            pmTabs.setOnChange(idx -> params.windowSizeExponent = idx + 10);
+            pmTabs.setAlignmentX(0);
+            content.add(pmTabs);
+            syncActions.add(() -> pmTabs.setSelectedIndex(params.windowSizeExponent - 10));
+        } else {
+            SegmentedControl windowSizeSegmented = new SegmentedControl(windowLabels, params.windowSizeExponent - 10);
+            windowSizeSegmented.setAlignmentX(0);
+            windowSizeSegmented.addChangeListener(e ->
+                    params.windowSizeExponent = windowSizeSegmented.getSelectedIndex() + 10);
+            content.add(windowSizeSegmented);
+            syncActions.add(() -> windowSizeSegmented.setSelectedIndex(params.windowSizeExponent - 10));
+        }
+        content.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
 
-        JLabel crLabel = Theme.paramLabel("Control Rate");
+        JLabel crLabel = Theme.isPaper() ? paperLabel("Control Rate") : Theme.paramLabel("Control Rate");
         crLabel.setAlignmentX(0);
-        card.add(crLabel);
-        card.add(Box.createVerticalStrut(Theme.LABEL_GAP));
-        controlRateStepper = new StepperControl(params.controlRate, 0.01, 1.0, 0.01, "%.2f s");
+        content.add(crLabel);
+        content.add(Box.createVerticalStrut(Theme.LABEL_GAP));
+        StepperControl controlRateStepper = new StepperControl(params.controlRate, 0.01, 1.0, 0.01, "%.2f s");
         controlRateStepper.setAlignmentX(0);
         controlRateStepper.addChangeListener(e -> params.controlRate = controlRateStepper.getDoubleValue());
+        content.add(controlRateStepper);
+        content.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        syncActions.add(() -> controlRateStepper.setValue(params.controlRate));
 
-        card.add(controlRateStepper);
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
-
-        JLabel gpLabel = Theme.paramLabel("Grains / Peak");
+        JLabel gpLabel = Theme.isPaper() ? paperLabel("Grains / Peak") : Theme.paramLabel("Grains / Peak");
         gpLabel.setAlignmentX(0);
-        card.add(gpLabel);
-        card.add(Box.createVerticalStrut(Theme.LABEL_GAP));
-        grainsPerPeakStepper = new StepperControl(params.grainsPerPeak, 1, 50, 1);
+        content.add(gpLabel);
+        content.add(Box.createVerticalStrut(Theme.LABEL_GAP));
+        StepperControl grainsPerPeakStepper = new StepperControl(params.grainsPerPeak, 1, 50, 1);
         grainsPerPeakStepper.setAlignmentX(0);
         grainsPerPeakStepper.addChangeListener(e -> params.grainsPerPeak = grainsPerPeakStepper.getIntValue());
+        content.add(grainsPerPeakStepper);
+        content.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        syncActions.add(() -> grainsPerPeakStepper.setValue(params.grainsPerPeak));
 
-        card.add(grainsPerPeakStepper);
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
-
-        ampThresholdSlider = new LabeledSlider("Amp Threshold", 1, 500,
+        LabeledSlider ampThresholdSlider = new LabeledSlider("Amp Threshold", 1, 500,
                 (int) (params.amplitudeThreshold * 1000),
                 v -> String.format("%.3f", v / 1000.0));
         ampThresholdSlider.setAlignmentX(0);
         ampThresholdSlider.addChangeListener(e ->
                 params.amplitudeThreshold = ampThresholdSlider.getValue() / 1000.0);
-
-        card.add(ampThresholdSlider);
+        content.add(ampThresholdSlider);
+        syncActions.add(() -> ampThresholdSlider.setValue((int) (params.amplitudeThreshold * 1000)));
 
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
         return card;
     }
 
     private JPanel buildReverbSection() {
-        JPanel card = sectionCard();
+        JPanel card;
+        JPanel content;
 
-        card.add(Theme.sectionHeader("Reverb"));
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        if (Theme.isPaper()) {
+            PmCard pmCard = new PmCard(PmCard.Variant.DEFAULT);
+            content = new JPanel();
+            content.setOpaque(false);
+            content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+            content.add(paperSectionHeader("Reverb"));
+            content.add(Box.createVerticalStrut(8));
+            pmCard.add(content, BorderLayout.CENTER);
+            card = pmCard;
+        } else {
+            card = sectionCard();
+            content = card;
+            content.add(Theme.sectionHeader("Reverb"));
+            content.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        }
 
-        useReverbToggle = new ToggleSwitch(params.useReverb);
+        ToggleSwitch useReverbToggle = new ToggleSwitch(params.useReverb);
         useReverbToggle.addChangeListener(e -> params.useReverb = useReverbToggle.isSelected());
         JPanel toggleRow = Theme.toggleRow("Use Reverb", useReverbToggle);
         toggleRow.setAlignmentX(0);
+        content.add(toggleRow);
+        content.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        syncActions.add(() -> useReverbToggle.setSelected(params.useReverb));
 
-        card.add(toggleRow);
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
-
-        sourceReverbSlider = new LabeledSlider("Source Mix", 0, 100,
+        LabeledSlider sourceReverbSlider = new LabeledSlider("Source Mix", 0, 100,
                 (int) (params.sourceReverbMix * 100),
                 v -> v + "%");
         sourceReverbSlider.setAlignmentX(0);
         sourceReverbSlider.addChangeListener(e ->
                 params.sourceReverbMix = sourceReverbSlider.getValue() / 100.0);
-        card.add(sourceReverbSlider);
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        content.add(sourceReverbSlider);
+        content.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        syncActions.add(() -> sourceReverbSlider.setValue((int) (params.sourceReverbMix * 100)));
 
-        synthReverbSlider = new LabeledSlider("Synth Mix", 0, 100,
+        LabeledSlider synthReverbSlider = new LabeledSlider("Synth Mix", 0, 100,
                 (int) (params.synthReverbMix * 100),
                 v -> v + "%");
         synthReverbSlider.setAlignmentX(0);
         synthReverbSlider.addChangeListener(e ->
                 params.synthReverbMix = synthReverbSlider.getValue() / 100.0);
-        card.add(synthReverbSlider);
+        content.add(synthReverbSlider);
+        syncActions.add(() -> synthReverbSlider.setValue((int) (params.synthReverbMix * 100)));
 
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
         return card;
     }
 
     private JPanel buildOutputSection() {
-        JPanel card = sectionCard();
+        JPanel card;
+        JPanel content;
 
-        card.add(Theme.sectionHeader("Output"));
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        if (Theme.isPaper()) {
+            PmCard pmCard = new PmCard(PmCard.Variant.DEFAULT);
+            content = new JPanel();
+            content.setOpaque(false);
+            content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+            content.add(paperSectionHeader("Output"));
+            content.add(Box.createVerticalStrut(8));
+            pmCard.add(content, BorderLayout.CENTER);
+            card = pmCard;
+        } else {
+            card = sectionCard();
+            content = card;
+            content.add(Theme.sectionHeader("Output"));
+            content.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        }
 
-        panSmoothSlider = new LabeledSlider("Pan Smoothing", 0, 100,
+        LabeledSlider panSmoothSlider = new LabeledSlider("Pan Smoothing", 0, 100,
                 (int) (params.panSmoothing * 100),
                 v -> String.format("%.2f", v / 100.0));
         panSmoothSlider.setAlignmentX(0);
         panSmoothSlider.addChangeListener(e ->
                 params.panSmoothing = panSmoothSlider.getValue() / 100.0);
-        card.add(panSmoothSlider);
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        content.add(panSmoothSlider);
+        content.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        syncActions.add(() -> panSmoothSlider.setValue((int) (params.panSmoothing * 100)));
 
-        JLabel cfLabel = Theme.paramLabel("Crossfade");
+        JLabel cfLabel = Theme.isPaper() ? paperLabel("Crossfade") : Theme.paramLabel("Crossfade");
         cfLabel.setAlignmentX(0);
-        card.add(cfLabel);
-        card.add(Box.createVerticalStrut(Theme.LABEL_GAP));
-        crossfadeStepper = new StepperControl(params.crossfadeDuration, 0.0, 5.0, 0.1, "%.1f s");
+        content.add(cfLabel);
+        content.add(Box.createVerticalStrut(Theme.LABEL_GAP));
+        StepperControl crossfadeStepper = new StepperControl(params.crossfadeDuration, 0.0, 5.0, 0.1, "%.1f s");
         crossfadeStepper.setAlignmentX(0);
         crossfadeStepper.addChangeListener(e -> params.crossfadeDuration = crossfadeStepper.getDoubleValue());
-        card.add(crossfadeStepper);
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        content.add(crossfadeStepper);
+        content.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        syncActions.add(() -> crossfadeStepper.setValue(params.crossfadeDuration));
 
-        dramaticSlider = new LabeledSlider("Dramatic", 1, 2000,
-                (int) (params.dramaticFactor * 100),
-                v -> String.format("%.2f", v / 100.0));
-        dramaticSlider.setAlignmentX(0);
-        dramaticSlider.addChangeListener(e ->
-                params.dramaticFactor = dramaticSlider.getValue() / 100.0);
-        card.add(dramaticSlider);
+        ToggleSwitch palindromeToggle = new ToggleSwitch(params.usePalindrome);
+        palindromeToggle.addChangeListener(e -> params.usePalindrome = palindromeToggle.isSelected());
+        JPanel palindromeRow = Theme.toggleRow("Palindrome", palindromeToggle);
+        palindromeRow.setAlignmentX(0);
+        content.add(palindromeRow);
+        syncActions.add(() -> palindromeToggle.setSelected(params.usePalindrome));
 
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
         return card;
     }
 
     private JPanel buildChordSection() {
-        JPanel card = sectionCard();
+        JPanel card;
+        JPanel content;
 
-        card.add(Theme.sectionHeader("Chord Mode"));
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        if (Theme.isPaper()) {
+            PmCard pmCard = new PmCard(PmCard.Variant.DEFAULT);
+            content = new JPanel();
+            content.setOpaque(false);
+            content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+            content.add(paperSectionHeader("Chord Mode"));
+            content.add(Box.createVerticalStrut(8));
+            pmCard.add(content, BorderLayout.CENTER);
+            card = pmCard;
+        } else {
+            card = sectionCard();
+            content = card;
+            content.add(Theme.sectionHeader("Chord Mode"));
+            content.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        }
 
-        chordEnableToggle = new ToggleSwitch(params.useChordMode);
+        ToggleSwitch chordEnableToggle = new ToggleSwitch(params.useChordMode);
         chordEnableToggle.addChangeListener(e -> params.useChordMode = chordEnableToggle.isSelected());
         JPanel toggleRow = Theme.toggleRow("Enable", chordEnableToggle);
         toggleRow.setAlignmentX(0);
+        content.add(toggleRow);
+        content.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        syncActions.add(() -> chordEnableToggle.setSelected(params.useChordMode));
 
-        card.add(toggleRow);
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
-
-        JLabel ratiosLabel = Theme.paramLabel("Ratios");
+        JLabel ratiosLabel = Theme.isPaper() ? paperLabel("Ratios") : Theme.paramLabel("Ratios");
         ratiosLabel.setAlignmentX(0);
-        card.add(ratiosLabel);
-        card.add(Box.createVerticalStrut(Theme.LABEL_GAP));
-        chordRatiosField = styledTextField(arrayToString(params.chordRatios));
-        chordRatiosField.addActionListener(e -> parseChordRatios());
+        content.add(ratiosLabel);
+        content.add(Box.createVerticalStrut(Theme.LABEL_GAP));
+        JTextField chordRatiosField = styledTextField(arrayToString(params.chordRatios));
+        chordRatiosField.addActionListener(e -> params.chordRatios = parseDoubleArraySafe(chordRatiosField.getText(), params.chordRatios));
         chordRatiosField.addFocusListener(new java.awt.event.FocusAdapter() {
             @Override
             public void focusLost(java.awt.event.FocusEvent e) {
-                parseChordRatios();
+                params.chordRatios = parseDoubleArraySafe(chordRatiosField.getText(), params.chordRatios);
             }
         });
+        content.add(chordRatiosField);
+        content.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        syncActions.add(() -> chordRatiosField.setText(arrayToString(params.chordRatios)));
 
-        card.add(chordRatiosField);
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
-
-        JLabel attacksLabel = Theme.paramLabel("Attack Times");
+        JLabel attacksLabel = Theme.isPaper() ? paperLabel("Attack Times") : Theme.paramLabel("Attack Times");
         attacksLabel.setAlignmentX(0);
-        card.add(attacksLabel);
-        card.add(Box.createVerticalStrut(Theme.LABEL_GAP));
-        chordAttacksField = styledTextField(arrayToString(params.chordAttackTimes));
-        chordAttacksField.addActionListener(e -> parseChordAttacks());
+        content.add(attacksLabel);
+        content.add(Box.createVerticalStrut(Theme.LABEL_GAP));
+        JTextField chordAttacksField = styledTextField(arrayToString(params.chordAttackTimes));
+        chordAttacksField.addActionListener(e -> params.chordAttackTimes = parseDoubleArraySafe(chordAttacksField.getText(), params.chordAttackTimes));
         chordAttacksField.addFocusListener(new java.awt.event.FocusAdapter() {
             @Override
             public void focusLost(java.awt.event.FocusEvent e) {
-                parseChordAttacks();
+                params.chordAttackTimes = parseDoubleArraySafe(chordAttacksField.getText(), params.chordAttackTimes);
             }
         });
-
-        card.add(chordAttacksField);
+        content.add(chordAttacksField);
+        syncActions.add(() -> chordAttacksField.setText(arrayToString(params.chordAttackTimes)));
 
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
         return card;
@@ -448,6 +530,21 @@ public class ParameterPanel extends JPanel implements Scrollable {
         return card;
     }
 
+    private static JLabel paperLabel(String text) {
+        JLabel label = new JLabel(text);
+        label.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 12));
+        label.setForeground(PaperMinimalistTokens.INK_LIGHT);
+        return label;
+    }
+
+    private static JLabel paperSectionHeader(String text) {
+        JLabel label = new JLabel(text.toUpperCase());
+        Theme.tagFont(label, "section");
+        label.setForeground(PaperMinimalistTokens.INK);
+        label.setAlignmentX(0);
+        return label;
+    }
+
     private static JTextField styledTextField(String text) {
         JTextField field = new JTextField(text);
         Theme.tagFont(field, "mono");
@@ -461,14 +558,12 @@ public class ParameterPanel extends JPanel implements Scrollable {
         return field;
     }
 
-    private void parseChordRatios() {
-        try { params.chordRatios = parseDoubleArray(chordRatiosField.getText()); }
-        catch (NumberFormatException ignored) {}
-    }
-
-    private void parseChordAttacks() {
-        try { params.chordAttackTimes = parseDoubleArray(chordAttacksField.getText()); }
-        catch (NumberFormatException ignored) {}
+    private static double[] parseDoubleArraySafe(String text, double[] fallback) {
+        try {
+            return parseDoubleArray(text);
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
     }
 
     private static double[] parseDoubleArray(String text) {
@@ -557,22 +652,6 @@ public class ParameterPanel extends JPanel implements Scrollable {
     }
 
     public void syncFromParams() {
-        sourceDropPanel.setFile(params.sourceFile);
-        grainDropPanel.setFile(params.grainFile);
-        irDropPanel.setFile(params.impulseResponseFile);
-        refFreqStepper.setValue(params.grainReferenceFreq);
-        windowSizeSegmented.setSelectedIndex(params.windowSizeExponent - 10);
-        controlRateStepper.setValue(params.controlRate);
-        grainsPerPeakStepper.setValue(params.grainsPerPeak);
-        ampThresholdSlider.setValue((int) (params.amplitudeThreshold * 1000));
-        useReverbToggle.setSelected(params.useReverb);
-        sourceReverbSlider.setValue((int) (params.sourceReverbMix * 100));
-        synthReverbSlider.setValue((int) (params.synthReverbMix * 100));
-        panSmoothSlider.setValue((int) (params.panSmoothing * 100));
-        crossfadeStepper.setValue(params.crossfadeDuration);
-        dramaticSlider.setValue((int) (params.dramaticFactor * 100));
-        chordEnableToggle.setSelected(params.useChordMode);
-        chordRatiosField.setText(arrayToString(params.chordRatios));
-        chordAttacksField.setText(arrayToString(params.chordAttackTimes));
+        for (Runnable action : syncActions) action.run();
     }
 }

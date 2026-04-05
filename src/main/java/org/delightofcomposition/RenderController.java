@@ -7,7 +7,6 @@ import javax.swing.SwingWorker;
 
 import org.delightofcomposition.envelopes.Envelope;
 import org.delightofcomposition.sound.ChangeSpeed;
-import org.delightofcomposition.sound.DramaticEnvelope;
 import org.delightofcomposition.sound.ReadSound;
 import org.delightofcomposition.sound.WaveWriter;
 
@@ -52,6 +51,19 @@ public class RenderController {
                     double[] sound = Demo.demo(sample, snap, pct -> publish(pct));
                     if (sound == null) return null; // cancelled
 
+                    // Per-voice dynamics (applied before panning/palindrome)
+                    double[] rawCopy = null;
+                    if (snap.useDynamicsEnv && snap.dynamicsPerVoice) {
+                        rawCopy = snap.usePalindrome ? Arrays.copyOf(sound, sound.length) : null;
+                        applyDynamicsToMono(sound, origlen, snap);
+                    }
+
+                    // Palindrome
+                    if (snap.usePalindrome) {
+                        double[] pre = (rawCopy != null) ? rawCopy : Arrays.copyOf(sound, sound.length);
+                        sound = applyPalindrome(sound, pre, origlen, snap.crossfadeDuration);
+                    }
+
                     // Calculate needed buffer length
                     int bufLen = sound.length + WaveWriter.SAMPLE_RATE * 5;
                     WaveWriter ww = new WaveWriter("_render_temp", bufLen);
@@ -65,8 +77,9 @@ public class RenderController {
                         ww.df[1][i] += (float) ((1 - pan) * sound[i]);
                     }
 
-                    if (snap.useDynamicsEnv)
-                        applyDynamicsEnvelope(ww.df, snap.dynamicsEnv, sound.length);
+                    // Post-mix dynamics (only if not already applied per-voice)
+                    if (snap.useDynamicsEnv && !snap.dynamicsPerVoice)
+                        applyDynamicsEnvelope(ww.df, snap.dynamicsEnv, origlen, snap);
                     return ww.getBuffer();
                 } else {
                     // Chord mode — mirrors Main.java experiment2 logic
@@ -148,49 +161,74 @@ public class RenderController {
             }
             if (sound == null) return null;
 
-            if (n == 0) {
-                DramaticEnvelope.dramaticEnvelope(sound, sampleLen,
-                        snap.dramaticEnvShape, snap.dramaticFactor);
-            } else {
-                double[] dramaticEnvelopeSound = Arrays.copyOf(sound, sound.length);
-                DramaticEnvelope.dramaticEnvelope(dramaticEnvelopeSound, sampleLen,
-                        snap.dramaticEnvShape, snap.dramaticFactor);
+            // Per-voice dynamics
+            if (snap.useDynamicsEnv && snap.dynamicsPerVoice) {
+                double[] rawCopy = snap.usePalindrome ? Arrays.copyOf(sound, sound.length) : null;
+                applyDynamicsToMono(sound, sampleLen, snap);
 
-                sound = Arrays.copyOf(sound, sampleLen);
-                double crossFadeDur = snap.crossfadeDuration;
-
-                double[] fullSound = new double[dramaticEnvelopeSound.length + sound.length
-                        - (int) (crossFadeDur * WaveWriter.SAMPLE_RATE)];
-                for (int i = 0; i < fullSound.length; i++) {
-                    if (i < dramaticEnvelopeSound.length)
-                        fullSound[i] = dramaticEnvelopeSound[i];
-                    int framesPastTransition = i - (sampleLen
-                            - (int) (WaveWriter.SAMPLE_RATE * crossFadeDur));
-                    if (framesPastTransition > 0 && framesPastTransition < sound.length) {
-                        double crossFadeDurInFrames = WaveWriter.SAMPLE_RATE * crossFadeDur;
-                        double mix = Math.min(1, framesPastTransition / crossFadeDurInFrames);
-                        fullSound[i] = mix * sound[sound.length - framesPastTransition]
-                                + (1 - mix) * fullSound[i];
+                if (n > 0 || snap.usePalindrome) {
+                    // Palindrome for harmonics (always) or fundamental (if toggled)
+                    boolean doPalindrome = (n > 0) || snap.usePalindrome;
+                    if (doPalindrome) {
+                        double[] pre = (rawCopy != null) ? rawCopy : Arrays.copyOf(sound, sound.length);
+                        sound = applyPalindrome(sound, pre, sampleLen, snap.crossfadeDuration);
                     }
                 }
 
-                int startForEndAlignment = fundLen - sampleLen;
-                if (startForEndAlignment >= 0) {
-                    sample = ReadSound.readSoundDoubles(snap.sourceFile.getPath());
-                    sample = extractRegion(sample, snap);
-                    sample = ChangeSpeed.changeSpeed(sample, ratio, 1);
-                    double[] softAttack = Demo.demo(sample, snap, null);
-                    if (softAttack == null) return null;
-                    DramaticEnvelope.dramaticEnvelope(softAttack, sampleLen,
-                            snap.dramaticEnvShape, snap.dramaticFactor);
-                    for (int i = 0; i < softAttack.length && (startForEndAlignment + i) < ww.df[0].length; i++) {
-                        ww.df[0][startForEndAlignment + i] += (float) softAttack[i];
-                        ww.df[1][startForEndAlignment + i] += (float) softAttack[i];
+                // Soft attack fill for harmonics
+                if (n > 0) {
+                    int startForEndAlignment = fundLen - sampleLen;
+                    if (startForEndAlignment >= 0) {
+                        sample = ReadSound.readSoundDoubles(snap.sourceFile.getPath());
+                        sample = extractRegion(sample, snap);
+                        sample = ChangeSpeed.changeSpeed(sample, ratio, 1);
+                        double[] softAttack = Demo.demo(sample, snap, null);
+                        if (softAttack == null) return null;
+                        applyDynamicsToMono(softAttack, sampleLen, snap);
+                        for (int i = 0; i < softAttack.length && (startForEndAlignment + i) < ww.df[0].length; i++) {
+                            ww.df[0][startForEndAlignment + i] += (float) softAttack[i];
+                            ww.df[1][startForEndAlignment + i] += (float) softAttack[i];
+                        }
                     }
                 }
 
-                sound = fullSound;
                 sampleLen = sound.length;
+            } else {
+                // No per-voice dynamics — apply dynamics to forward pass for palindrome
+                if (n > 0) {
+                    double[] rawSound = Arrays.copyOf(sound, sampleLen);
+                    double[] forwardSound = Arrays.copyOf(sound, sound.length);
+                    // Apply dynamics to forward pass (matches old dramatic envelope behavior)
+                    if (snap.useDynamicsEnv) {
+                        applyDynamicsToMono(forwardSound, sampleLen, snap);
+                    }
+                    sound = applyPalindrome(forwardSound, rawSound, sampleLen, snap.crossfadeDuration);
+
+                    int startForEndAlignment = fundLen - sampleLen;
+                    if (startForEndAlignment >= 0) {
+                        sample = ReadSound.readSoundDoubles(snap.sourceFile.getPath());
+                        sample = extractRegion(sample, snap);
+                        sample = ChangeSpeed.changeSpeed(sample, ratio, 1);
+                        double[] softAttack = Demo.demo(sample, snap, null);
+                        if (softAttack == null) return null;
+                        if (snap.useDynamicsEnv) {
+                            applyDynamicsToMono(softAttack, sampleLen, snap);
+                        }
+                        for (int i = 0; i < softAttack.length && (startForEndAlignment + i) < ww.df[0].length; i++) {
+                            ww.df[0][startForEndAlignment + i] += (float) softAttack[i];
+                            ww.df[1][startForEndAlignment + i] += (float) softAttack[i];
+                        }
+                    }
+
+                    sampleLen = sound.length;
+                } else if (snap.usePalindrome) {
+                    double[] rawCopy = Arrays.copyOf(sound, sound.length);
+                    if (snap.useDynamicsEnv) {
+                        applyDynamicsToMono(sound, sampleLen, snap);
+                    }
+                    sound = applyPalindrome(sound, rawCopy, sampleLen, snap.crossfadeDuration);
+                    sampleLen = sound.length;
+                }
             }
 
             for (int i = 0; i < sound.length; i++) {
@@ -206,29 +244,76 @@ public class RenderController {
             }
         }
 
-        if (snap.useDynamicsEnv)
-            applyDynamicsEnvelope(ww.df, snap.dynamicsEnv, fundLen);
+        if (snap.useDynamicsEnv && !snap.dynamicsPerVoice)
+            applyDynamicsEnvelope(ww.df, snap.dynamicsEnv, fundLen, snap);
         return ww.getBuffer();
     }
 
-    private static void applyDynamicsEnvelope(float[][] df, Envelope env, int refLen) {
+    /**
+     * Apply dynamics envelope to a mono voice buffer (before stereo panning).
+     */
+    private static void applyDynamicsToMono(double[] sound, int refLen, SynthParameters snap) {
+        Envelope env = snap.dynamicsEnv;
+        if (env.times == null || env.times.length == 0) return;
+        boolean exponential = snap.dynamicsExponential;
+        double factor = snap.dramaticFactor;
+        double denom = (factor > 0.001) ? (Math.exp(factor) - 1) : 1.0;
+
+        for (int i = 0; i < sound.length; i++) {
+            double t = Math.min((double) i / refLen, 1.0);
+            double linear = env.getValue(t);
+            if (exponential && factor > 0.001) {
+                double expGain = (Math.exp(factor * linear) - 1) / denom;
+                sound[i] *= expGain;
+            } else {
+                sound[i] *= linear;
+            }
+        }
+    }
+
+    /**
+     * Apply palindrome: forward sound with crossfade into reversed raw sound.
+     */
+    private static double[] applyPalindrome(double[] forwardSound, double[] rawSound,
+            int sampleLen, double crossfadeDuration) {
+        int crossFadeSamples = (int) (crossfadeDuration * WaveWriter.SAMPLE_RATE);
+        double[] truncatedRaw = Arrays.copyOf(rawSound, Math.min(rawSound.length, sampleLen));
+
+        double[] result = new double[forwardSound.length + truncatedRaw.length - crossFadeSamples];
+        for (int i = 0; i < result.length; i++) {
+            if (i < forwardSound.length)
+                result[i] = forwardSound[i];
+            int framesPastTransition = i - (sampleLen - crossFadeSamples);
+            if (framesPastTransition > 0 && framesPastTransition < truncatedRaw.length) {
+                double mix = Math.min(1.0, framesPastTransition / (double) crossFadeSamples);
+                result[i] = mix * truncatedRaw[truncatedRaw.length - framesPastTransition]
+                        + (1 - mix) * result[i];
+            }
+        }
+        return result;
+    }
+
+    private static void applyDynamicsEnvelope(float[][] df, Envelope env, int refLen, SynthParameters snap) {
         double[] times = env.times;
         double[] values = env.values;
         if (times == null || times.length == 0) return;
 
+        boolean exponential = snap.dynamicsExponential;
+        double factor = snap.dramaticFactor;
+        double denom = (factor > 0.001) ? (Math.exp(factor) - 1) : 1.0;
+
         int len = df[0].length;
-        int seg = 0; // current envelope segment
+        int seg = 0;
         double segStartT = times[0];
         double segEndT = times.length > 1 ? times[1] : segStartT;
         double segStartV = values[0];
         double segEndV = times.length > 1 ? values[1] : segStartV;
         double segSpan = segEndT - segStartT;
-        double slope = segSpan > 0 ? (segEndV - segStartV) / segSpan : 0;
+        double segCurve = env.getCurve(0);
 
         for (int i = 0; i < len; i++) {
             double t = Math.min((double) i / refLen, 1.0);
 
-            // Advance segment if needed
             while (seg < times.length - 2 && t >= segEndT) {
                 seg++;
                 segStartT = times[seg];
@@ -236,7 +321,7 @@ public class RenderController {
                 segStartV = values[seg];
                 segEndV = values[seg + 1];
                 segSpan = segEndT - segStartT;
-                slope = segSpan > 0 ? (segEndV - segStartV) / segSpan : 0;
+                segCurve = env.getCurve(seg);
             }
 
             float gain;
@@ -245,7 +330,13 @@ public class RenderController {
             } else if (t >= times[times.length - 1]) {
                 gain = (float) values[times.length - 1];
             } else {
-                gain = (float) (segStartV + slope * (t - segStartT));
+                double frac = segSpan > 0 ? (t - segStartT) / segSpan : 0;
+                double shapedFrac = Envelope.applyCurve(frac, segCurve);
+                gain = (float) (segStartV + shapedFrac * (segEndV - segStartV));
+            }
+
+            if (exponential && factor > 0.001) {
+                gain = (float) ((Math.exp(factor * gain) - 1) / denom);
             }
 
             df[0][i] *= gain;

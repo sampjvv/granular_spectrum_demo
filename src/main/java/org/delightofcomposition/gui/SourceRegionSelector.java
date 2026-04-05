@@ -185,8 +185,9 @@ public class SourceRegionSelector extends JComponent {
 
         // Draw waveform (within padded area)
         int waveW = w - 2 * PAD_H;
-        g2.setColor(new Color(Theme.ACCENT.getRed(), Theme.ACCENT.getGreen(),
-                Theme.ACCENT.getBlue(), 100));
+        Color waveColor = Theme.isPaper() ? new Color(0x90, 0xB8, 0xA0, 140) : new Color(Theme.ACCENT.getRed(), Theme.ACCENT.getGreen(),
+                Theme.ACCENT.getBlue(), 100);
+        g2.setColor(waveColor);
         for (int px = 0; px < waveW; px++) {
             int s0 = (int) ((long) px * waveformData.length / waveW);
             int s1 = (int) ((long) (px + 1) * waveformData.length / waveW);
@@ -217,7 +218,8 @@ public class SourceRegionSelector extends JComponent {
         }
 
         // Marker lines
-        g2.setColor(Theme.ACCENT);
+        Color markerColor = Theme.isPaper() ? new Color(0x44, 0x44, 0x44) : Theme.ACCENT;
+        g2.setColor(markerColor);
         g2.fillRect(startX - 1, 0, 2, h);
         g2.fillRect(endX - 1, 0, 2, h);
 

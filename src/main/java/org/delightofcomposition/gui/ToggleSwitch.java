@@ -7,6 +7,12 @@ import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.Shape;
+import java.awt.geom.RoundRectangle2D;
+
+import java.awt.image.BufferedImage;
+
+import com.sptc.uilab.tokens.PaperMinimalistTokens;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -25,6 +31,23 @@ import javax.swing.event.ChangeListener;
  */
 public class ToggleSwitch extends JComponent {
 
+    private static final float[][] BAYER8 = new float[8][8];
+    static {
+        int[][] raw = {
+            { 0, 32,  8, 40,  2, 34, 10, 42},
+            {48, 16, 56, 24, 50, 18, 58, 26},
+            {12, 44,  4, 36, 14, 46,  6, 38},
+            {60, 28, 52, 20, 62, 30, 54, 22},
+            { 3, 35, 11, 43,  1, 33,  9, 41},
+            {51, 19, 59, 27, 49, 17, 57, 25},
+            {15, 47,  7, 39, 13, 45,  5, 37},
+            {63, 31, 55, 23, 61, 29, 53, 21}
+        };
+        for (int y = 0; y < 8; y++)
+            for (int x = 0; x < 8; x++)
+                BAYER8[y][x] = raw[y][x] / 64f;
+    }
+
     private static final int TRACK_W = 48;
     private static final int TRACK_H = 26;
     private static final int THUMB_SIZE = 20;
@@ -36,6 +59,8 @@ public class ToggleSwitch extends JComponent {
     private float thumbPos; // 0.0 = off (left), 1.0 = on (right)
     private Timer animTimer;
     private final List<ChangeListener> listeners = new ArrayList<>();
+    private BufferedImage paperTrackImage;
+    private float lastRenderedThumbPos = -1f;
 
     public ToggleSwitch(boolean initialState) {
         this.selected = initialState;
@@ -120,6 +145,24 @@ public class ToggleSwitch extends JComponent {
                 SynthwavePainter.paintGlow(g2, thumbX, thumbY, THUMB_SIZE, THUMB_SIZE,
                         Theme.SW_GREEN, 3);
             }
+        } else if (Theme.isPaper()) {
+            // Render dithered track into cached BufferedImage to avoid
+            // per-pixel repaint artifacts with non-opaque component hierarchy
+            if (paperTrackImage == null || lastRenderedThumbPos != thumbPos) {
+                paperTrackImage = renderPaperTrack(thumbPos);
+                lastRenderedThumbPos = thumbPos;
+            }
+            g2.drawImage(paperTrackImage, 0, yOff, null);
+
+            // Thumb
+            int thumbRange = TRACK_W - THUMB_SIZE - PAD * 2;
+            int thumbX = PAD + (int) (thumbPos * thumbRange);
+            int thumbY = yOff + PAD;
+            g2.setColor(PaperMinimalistTokens.PAPER);
+            g2.fillOval(thumbX, thumbY, THUMB_SIZE, THUMB_SIZE);
+            g2.setStroke(new BasicStroke(1.5f));
+            g2.setColor(PaperMinimalistTokens.INK);
+            g2.drawOval(thumbX, thumbY, THUMB_SIZE - 1, THUMB_SIZE - 1);
         } else {
             // iOS-style pill
             Color trackColor = interpolateColor(Theme.ZINC_700, Theme.SUCCESS, thumbPos);
@@ -149,6 +192,33 @@ public class ToggleSwitch extends JComponent {
                 (int) (a.getBlue() + (b.getBlue() - a.getBlue()) * t));
     }
 
+    private BufferedImage renderPaperTrack(float pos) {
+        BufferedImage img = new BufferedImage(TRACK_W, TRACK_H, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D ig = img.createGraphics();
+        ig.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+        Color offColor = new Color(0xEE, 0xEE, 0xEE);
+        Color onColor  = new Color(0x88, 0x88, 0x88);
+
+        ig.setClip(new RoundRectangle2D.Float(0, 0, TRACK_W, TRACK_H, TRACK_H, TRACK_H));
+        for (int py = 0; py < TRACK_H; py++) {
+            for (int px = 0; px < TRACK_W; px++) {
+                int bx = ((int)(px / 1.5)) & 7;
+                int by = ((int)(py / 1.5)) & 7;
+                ig.setColor(pos > BAYER8[by][bx] ? onColor : offColor);
+                ig.fillRect(px, py, 1, 1);
+            }
+        }
+        ig.setClip(null);
+
+        ig.setStroke(new BasicStroke(1.5f));
+        ig.setColor(PaperMinimalistTokens.INK);
+        ig.drawRoundRect(0, 0, TRACK_W - 1, TRACK_H - 1, TRACK_H, TRACK_H);
+
+        ig.dispose();
+        return img;
+    }
+
     @Override
     public Dimension getPreferredSize() {
         return new Dimension(TRACK_W, Theme.TOUCH_TARGET);
@@ -172,6 +242,7 @@ public class ToggleSwitch extends JComponent {
         if (this.selected != sel) {
             this.selected = sel;
             this.thumbPos = sel ? 1f : 0f;
+            if (animTimer != null) animTimer.stop();
             repaint();
         }
     }
