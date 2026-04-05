@@ -32,6 +32,8 @@ public class PresetManager {
         props.setProperty("crossfadeDuration", String.valueOf(params.crossfadeDuration));
         props.setProperty("dramaticFactor", String.valueOf(params.dramaticFactor));
         props.setProperty("usePalindrome", String.valueOf(params.usePalindrome));
+        props.setProperty("crossfadeCurve", String.valueOf(params.crossfadeCurve));
+        props.setProperty("crossfadeOverlap", String.valueOf(params.crossfadeOverlap));
         props.setProperty("dynamicsExponential", String.valueOf(params.dynamicsExponential));
         props.setProperty("dynamicsPerVoice", String.valueOf(params.dynamicsPerVoice));
         props.setProperty("useChordMode", String.valueOf(params.useChordMode));
@@ -95,6 +97,10 @@ public class PresetManager {
                 props.getProperty("dramaticFactor", String.valueOf(params.dramaticFactor)));
         params.usePalindrome = Boolean.parseBoolean(
                 props.getProperty("usePalindrome", "false"));
+        params.crossfadeCurve = Double.parseDouble(
+                props.getProperty("crossfadeCurve", "0.0"));
+        params.crossfadeOverlap = Double.parseDouble(
+                props.getProperty("crossfadeOverlap", "0.0"));
         params.dynamicsExponential = Boolean.parseBoolean(
                 props.getProperty("dynamicsExponential", "false"));
         params.dynamicsPerVoice = Boolean.parseBoolean(

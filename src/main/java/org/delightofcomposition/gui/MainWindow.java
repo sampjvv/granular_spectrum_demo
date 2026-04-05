@@ -16,6 +16,7 @@ import java.util.List;
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JFileChooser;
@@ -75,6 +76,7 @@ public class MainWindow extends JFrame {
     private JButton liveSavePresetBtn;
     private LibraryPanel libraryPanel;
     private SourceRegionSelector regionSelector;
+    private PalindromeCrossfadePanel palindromeCrossfadePanel;
     private float[] fullSourceWaveform; // stored for re-slicing on region change
     private JPanel toolbar;
     private JPanel mainWithLibrary;
@@ -538,10 +540,44 @@ public class MainWindow extends JFrame {
             loadSourceWaveform();
         });
 
+        palindromeCrossfadePanel = new PalindromeCrossfadePanel(params);
+
+        // Raised card containing region selector + palindrome controls
+        JPanel regionCard;
+        if (Theme.isPaper()) {
+            regionCard = new com.sptc.uilab.papermin.PmCard(
+                    com.sptc.uilab.papermin.PmCard.Variant.RAISED);
+        } else {
+            regionCard = new JPanel() {
+                @Override
+                protected void paintComponent(java.awt.Graphics g) {
+                    java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+                    g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                            java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                    if (Theme.isSynthwave()) {
+                        SynthwavePainter.fillPanel(g2, 0, 0, getWidth(), getHeight(),
+                                Theme.BG_CARD, Theme.BG_CARD);
+                        SynthwavePainter.paintBevel(g2, 0, 0, getWidth(), getHeight(), true);
+                    } else {
+                        g2.setColor(Theme.BG_CARD);
+                        g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
+                                Theme.RADIUS_LG, Theme.RADIUS_LG);
+                    }
+                    g2.dispose();
+                }
+            };
+            regionCard.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        }
+        regionCard.setLayout(new BoxLayout(regionCard, BoxLayout.Y_AXIS));
+        regionCard.setOpaque(false);
+        regionCard.add(regionSelector);
+        regionCard.add(Box.createVerticalStrut(4));
+        regionCard.add(palindromeCrossfadePanel);
+
         JPanel envelopeWrapper = new JPanel(new BorderLayout(0, 4));
         envelopeWrapper.setOpaque(false);
         envelopeWrapper.setBorder(BorderFactory.createEmptyBorder(8, 8, 0, 8));
-        envelopeWrapper.add(regionSelector, BorderLayout.NORTH);
+        envelopeWrapper.add(regionCard, BorderLayout.NORTH);
         envelopeWrapper.add(envelopeScroll, BorderLayout.CENTER);
 
         envelopeScroll.setMinimumSize(new Dimension(0, 280));
@@ -601,6 +637,7 @@ public class MainWindow extends JFrame {
             @Override
             public void onUpdateEntry(SoundLibrary.LibraryEntry entry, boolean isRender) {
                 envelopePanel.syncToParams();
+                palindromeCrossfadePanel.syncToParams();
                 if (isRender && renderedBuffer != null) {
                     SoundLibrary.updateRender(entry, renderedBuffer, params);
                 } else {
@@ -937,6 +974,9 @@ public class MainWindow extends JFrame {
                         fullSourceWaveform = samples;
                         if (regionSelector != null) {
                             regionSelector.setWaveformData(samples);
+                        }
+                        if (palindromeCrossfadePanel != null) {
+                            palindromeCrossfadePanel.setWaveformData(samples);
                         }
                         updateEnvelopeWaveform();
                     }

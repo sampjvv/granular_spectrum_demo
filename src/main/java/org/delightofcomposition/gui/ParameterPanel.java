@@ -324,23 +324,6 @@ public class ParameterPanel extends JPanel implements Scrollable {
         content.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
         syncActions.add(() -> panSmoothSlider.setValue((int) (params.panSmoothing * 100)));
 
-        JLabel cfLabel = Theme.isPaper() ? paperLabel("Crossfade") : Theme.paramLabel("Crossfade");
-        cfLabel.setAlignmentX(0);
-        content.add(cfLabel);
-        content.add(Box.createVerticalStrut(Theme.LABEL_GAP));
-        StepperControl crossfadeStepper = new StepperControl(params.crossfadeDuration, 0.0, 5.0, 0.1, "%.1f s");
-        crossfadeStepper.setAlignmentX(0);
-        crossfadeStepper.addChangeListener(e -> params.crossfadeDuration = crossfadeStepper.getDoubleValue());
-        content.add(crossfadeStepper);
-        content.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
-        syncActions.add(() -> crossfadeStepper.setValue(params.crossfadeDuration));
-
-        ToggleSwitch palindromeToggle = new ToggleSwitch(params.usePalindrome);
-        palindromeToggle.addChangeListener(e -> params.usePalindrome = palindromeToggle.isSelected());
-        JPanel palindromeRow = Theme.toggleRow("Palindrome", palindromeToggle);
-        palindromeRow.setAlignmentX(0);
-        content.add(palindromeRow);
-        syncActions.add(() -> palindromeToggle.setSelected(params.usePalindrome));
 
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
         return card;

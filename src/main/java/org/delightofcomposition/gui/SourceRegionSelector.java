@@ -41,8 +41,8 @@ public class SourceRegionSelector extends JComponent {
 
     public SourceRegionSelector(SynthParameters params) {
         this.params = params;
-        setPreferredSize(new Dimension(0, 80));
-        setMinimumSize(new Dimension(0, 60));
+        setPreferredSize(new Dimension(0, 68));
+        setMinimumSize(new Dimension(0, 50));
         setOpaque(false);
         setFocusable(true);
 
@@ -158,15 +158,12 @@ public class SourceRegionSelector extends JComponent {
         int w = getWidth();
         int h = getHeight();
 
-        // Background card
-        if (Theme.isSynthwave()) {
-            SynthwavePainter.fillPanel(g2, 0, 0, w, h, Theme.BG_CARD, Theme.BORDER_SUBTLE);
-        } else {
-            g2.setColor(Theme.BG_CARD);
-            g2.fillRoundRect(0, 0, w - 1, h - 1, Theme.RADIUS, Theme.RADIUS);
-            g2.setColor(Theme.BORDER_SUBTLE);
-            g2.drawRoundRect(0, 0, w - 1, h - 1, Theme.RADIUS, Theme.RADIUS);
-        }
+        // Waveform background (lighter than parent card)
+        Color waveBg = Theme.isPaper()
+                ? new Color(0xFF, 0xFE, 0xFD)
+                : Theme.BG_INPUT;
+        g2.setColor(waveBg);
+        g2.fillRoundRect(0, 0, w - 1, h - 1, Theme.RADIUS_SM, Theme.RADIUS_SM);
 
         if (waveformData == null || waveformData.length == 0) {
             g2.setFont(Theme.FONT_SMALL);
@@ -259,16 +256,6 @@ public class SourceRegionSelector extends JComponent {
         g2.setColor(Theme.FG_DIM);
         g2.drawString(outStr, w - PAD_H - fm.stringWidth(outStr) - LABEL_PAD, fm.getAscent() + 2);
 
-        // Focus ring
-        if (isFocusOwner() && !Theme.isSynthwave()) {
-            if (Theme.isSynthwave()) {
-                SynthwavePainter.strokeShape(g2, 1, 1, w - 2, h - 2, Theme.RING);
-            } else {
-                g2.setColor(Theme.RING);
-                g2.setStroke(new BasicStroke(2f));
-                g2.drawRoundRect(1, 1, w - 3, h - 3, Theme.RADIUS, Theme.RADIUS);
-            }
-        }
 
         g2.dispose();
     }

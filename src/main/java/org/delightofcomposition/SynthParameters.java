@@ -41,6 +41,8 @@ public class SynthParameters {
     public double crossfadeDuration = 0.5;
     public double dramaticFactor = 0.01;
     public boolean usePalindrome = false;
+    public double crossfadeCurve = 0.0;        // -1.0 (concave/fast) to +1.0 (convex/slow), 0 = linear
+    public double crossfadeOverlap = 0.0;         // 0.0 = standard crossfade, 1.0 = full overlap plateau
 
     // Dynamics envelope options
     public boolean dynamicsExponential = false;
@@ -107,6 +109,8 @@ public class SynthParameters {
         copy.crossfadeDuration = this.crossfadeDuration;
         copy.dramaticFactor = this.dramaticFactor;
         copy.usePalindrome = this.usePalindrome;
+        copy.crossfadeCurve = this.crossfadeCurve;
+        copy.crossfadeOverlap = this.crossfadeOverlap;
         copy.dynamicsExponential = this.dynamicsExponential;
         copy.dynamicsPerVoice = this.dynamicsPerVoice;
         copy.useChordMode = this.useChordMode;

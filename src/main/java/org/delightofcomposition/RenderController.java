@@ -65,7 +65,7 @@ public class RenderController {
                     // Palindrome
                     if (snap.usePalindrome) {
                         double[] pre = (rawCopy != null) ? rawCopy : Arrays.copyOf(sound, sound.length);
-                        sound = applyPalindrome(sound, pre, sound.length, snap.crossfadeDuration);
+                        sound = applyPalindrome(sound, pre, sound.length, snap.crossfadeDuration, snap.crossfadeCurve, snap.crossfadeOverlap);
                     }
 
                     // Calculate needed buffer length
@@ -175,7 +175,7 @@ public class RenderController {
                     boolean doPalindrome = (n > 0) || snap.usePalindrome;
                     if (doPalindrome) {
                         double[] pre = (rawCopy != null) ? rawCopy : Arrays.copyOf(sound, sound.length);
-                        sound = applyPalindrome(sound, pre, sound.length, snap.crossfadeDuration);
+                        sound = applyPalindrome(sound, pre, sound.length, snap.crossfadeDuration, snap.crossfadeCurve, snap.crossfadeOverlap);
                     }
                 }
 
@@ -206,7 +206,7 @@ public class RenderController {
                     if (snap.useDynamicsEnv) {
                         applyDynamicsToMono(forwardSound, sampleLen, snap);
                     }
-                    sound = applyPalindrome(forwardSound, rawSound, sound.length, snap.crossfadeDuration);
+                    sound = applyPalindrome(forwardSound, rawSound, sound.length, snap.crossfadeDuration, snap.crossfadeCurve, snap.crossfadeOverlap);
 
                     int startForEndAlignment = fundLen - sampleLen;
                     if (startForEndAlignment >= 0) {
@@ -230,7 +230,7 @@ public class RenderController {
                     if (snap.useDynamicsEnv) {
                         applyDynamicsToMono(sound, sampleLen, snap);
                     }
-                    sound = applyPalindrome(sound, rawCopy, sound.length, snap.crossfadeDuration);
+                    sound = applyPalindrome(sound, rawCopy, sound.length, snap.crossfadeDuration, snap.crossfadeCurve, snap.crossfadeOverlap);
                     sampleLen = sound.length;
                 }
             }
@@ -277,21 +277,53 @@ public class RenderController {
 
     /**
      * Apply palindrome: forward sound with crossfade into reversed raw sound.
+     * crossfadeCurve: -1 = concave (fast fade), 0 = linear, +1 = convex (slow fade)
+     * fullOverlap: both signals at full volume in the overlap zone (additive)
      */
     private static double[] applyPalindrome(double[] forwardSound, double[] rawSound,
-            int sampleLen, double crossfadeDuration) {
+            int sampleLen, double crossfadeDuration,
+            double crossfadeCurve, double overlap) {
         int crossFadeSamples = (int) (crossfadeDuration * WaveWriter.SAMPLE_RATE);
         double[] truncatedRaw = Arrays.copyOf(rawSound, Math.min(rawSound.length, sampleLen));
 
         double[] result = new double[forwardSound.length + truncatedRaw.length - crossFadeSamples];
+        double curveExp = Math.exp(-crossfadeCurve);
+        double fadeZone = (1.0 - overlap) / 2.0;
+
         for (int i = 0; i < result.length; i++) {
             if (i < forwardSound.length)
                 result[i] = forwardSound[i];
             int framesPastTransition = i - (sampleLen - crossFadeSamples);
             if (framesPastTransition > 0 && framesPastTransition < truncatedRaw.length) {
-                double mix = Math.min(1.0, framesPastTransition / (double) crossFadeSamples);
-                result[i] = mix * truncatedRaw[truncatedRaw.length - framesPastTransition]
-                        + (1 - mix) * result[i];
+                double revSample = truncatedRaw[truncatedRaw.length - framesPastTransition];
+                double linearPos = crossFadeSamples > 0
+                        ? Math.min(1.0, framesPastTransition / (double) crossFadeSamples) : 1.0;
+
+                double fwdGain, revGain;
+                if (overlap > 0.001) {
+                    // Overlap plateau model
+                    if (fadeZone < 0.001) {
+                        fwdGain = 1.0; revGain = 1.0;
+                    } else {
+                        if (linearPos < fadeZone) {
+                            revGain = Math.pow(linearPos / fadeZone, curveExp);
+                        } else {
+                            revGain = 1.0;
+                        }
+                        if (linearPos < fadeZone + overlap) {
+                            fwdGain = 1.0;
+                        } else {
+                            double f = (linearPos - fadeZone - overlap) / fadeZone;
+                            fwdGain = 1.0 - Math.pow(Math.min(1, f), curveExp);
+                        }
+                    }
+                } else {
+                    // Classic crossfade with curve shaping
+                    double mix = crossFadeSamples > 0 ? Math.pow(linearPos, curveExp) : 1.0;
+                    revGain = mix;
+                    fwdGain = 1.0 - mix;
+                }
+                result[i] = fwdGain * result[i] + revGain * revSample;
             }
         }
         return result;
