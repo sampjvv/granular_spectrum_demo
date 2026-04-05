@@ -108,6 +108,9 @@ public class EnvelopeCanvas extends JComponent {
     // Pitch snap-to-grid
     private boolean snapToGrid = false;
 
+    // Drag state — used to disable AA and throttle repaints during interaction
+    private boolean dragging = false;
+
     private static class UndoSnapshot {
         final ArrayList<int[]> coords;
         final ArrayList<Double> curves;
@@ -119,6 +122,19 @@ public class EnvelopeCanvas extends JComponent {
 
     private final List<UndoSnapshot> undoStack = new ArrayList<>();
     private final List<ChangeListener> listeners = new ArrayList<>();
+
+    // Dirty flag for timer-driven repaints — only repaint when something changed
+    private volatile boolean dirty = true;
+
+    // Cached dithered fill image for Paper theme (avoids per-pixel loop on every repaint)
+    private java.awt.image.BufferedImage ditherFillCache;
+    private int ditherCacheW, ditherCacheH;
+
+    // Cached waveform background image
+    private java.awt.image.BufferedImage waveformCache;
+    private int waveformCacheW, waveformCacheH;
+    private double waveformCacheVX0, waveformCacheVX1;
+    private boolean waveformCacheDirty = true;
 
     // Source waveform for background rendering
     private float[] waveformData;
@@ -153,8 +169,8 @@ public class EnvelopeCanvas extends JComponent {
 
         setupMouseListeners();
 
-        // Repaint timer (50ms matches existing behavior)
-        Timer timer = new Timer(50, e -> repaint());
+        // Repaint timer — only repaints when dirty flag is set
+        Timer timer = new Timer(50, e -> { if (dirty) { dirty = false; repaint(); } });
         timer.start();
     }
 
@@ -206,7 +222,8 @@ public class EnvelopeCanvas extends JComponent {
     @Override
     protected void paintComponent(Graphics g) {
         Graphics2D g2 = (Graphics2D) g.create();
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                dragging ? RenderingHints.VALUE_ANTIALIAS_OFF : RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
 
         int w = getWidth();
@@ -325,27 +342,38 @@ public class EnvelopeCanvas extends JComponent {
             g2.drawLine(gx, 0, gx, h);
         }
 
-        // Draw source waveform background
+        // Draw source waveform background (cached)
         if (waveformData != null && waveformData.length > 0) {
-            Color waveColor = new Color(Theme.FG_DIM.getRed(), Theme.FG_DIM.getGreen(),
-                    Theme.FG_DIM.getBlue(), 70);
-            g2.setColor(waveColor);
-            int centerY = h / 2;
-            for (int px = 0; px < w; px++) {
-                double t0 = (viewX0 + (px / (double) w) * (viewX1 - viewX0)) / COORD_X_MAX;
-                double t1 = (viewX0 + ((px + 1) / (double) w) * (viewX1 - viewX0)) / COORD_X_MAX;
-                int s0 = Math.max(0, Math.min(waveformData.length - 1, (int) (t0 * waveformData.length)));
-                int s1 = Math.max(s0 + 1, Math.min(waveformData.length, (int) (t1 * waveformData.length)));
-                float minVal = 0, maxVal = 0;
-                for (int s = s0; s < s1; s++) {
-                    if (waveformData[s] < minVal) minVal = waveformData[s];
-                    if (waveformData[s] > maxVal) maxVal = waveformData[s];
+            if (waveformCache == null || waveformCacheDirty
+                    || waveformCacheW != w || waveformCacheH != h
+                    || waveformCacheVX0 != viewX0 || waveformCacheVX1 != viewX1) {
+                waveformCache = new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+                waveformCacheW = w; waveformCacheH = h;
+                waveformCacheVX0 = viewX0; waveformCacheVX1 = viewX1;
+                waveformCacheDirty = false;
+                Graphics2D wg = waveformCache.createGraphics();
+                Color waveColor = new Color(Theme.FG_DIM.getRed(), Theme.FG_DIM.getGreen(),
+                        Theme.FG_DIM.getBlue(), 70);
+                wg.setColor(waveColor);
+                int centerY = h / 2;
+                for (int px = 0; px < w; px++) {
+                    double t0 = (viewX0 + (px / (double) w) * (viewX1 - viewX0)) / COORD_X_MAX;
+                    double t1 = (viewX0 + ((px + 1) / (double) w) * (viewX1 - viewX0)) / COORD_X_MAX;
+                    int s0 = Math.max(0, Math.min(waveformData.length - 1, (int) (t0 * waveformData.length)));
+                    int s1 = Math.max(s0 + 1, Math.min(waveformData.length, (int) (t1 * waveformData.length)));
+                    float minVal = 0, maxVal = 0;
+                    for (int s = s0; s < s1; s++) {
+                        if (waveformData[s] < minVal) minVal = waveformData[s];
+                        if (waveformData[s] > maxVal) maxVal = waveformData[s];
+                    }
+                    int yMin = Math.max(0, Math.min(h - 1, centerY - (int) (maxVal * centerY)));
+                    int yMax = Math.max(0, Math.min(h - 1, centerY - (int) (minVal * centerY)));
+                    int lineH = yMax - yMin;
+                    if (lineH > 0) wg.fillRect(px, yMin, 1, lineH);
                 }
-                int yMin = Math.max(0, Math.min(h - 1, centerY - (int) (maxVal * centerY)));
-                int yMax = Math.max(0, Math.min(h - 1, centerY - (int) (minVal * centerY)));
-                int lineH = yMax - yMin;
-                if (lineH > 0) g2.fillRect(px, yMin, 1, lineH);
+                wg.dispose();
             }
+            g2.drawImage(waveformCache, 0, 0, null);
         }
 
         if (envelope.coords == null || envelope.coords.size() < 2) {
@@ -413,25 +441,35 @@ public class EnvelopeCanvas extends JComponent {
             g2.setPaint(gp);
             g2.fill(fillPath);
 
-            // Layer 2: dithered darker tone with steeper falloff
-            java.awt.Shape oldClip2 = g2.getClip();
-            g2.clip(fillPath);
-            Color darkerTone = new Color(curveColor.getRed(), curveColor.getGreen(), curveColor.getBlue(), 25);
-            g2.setColor(darkerTone);
+            // Layer 2: dithered darker tone with steeper falloff (cached)
             java.awt.Rectangle bounds = fillPath.getBounds();
-            for (int py = bounds.y; py < bounds.y + bounds.height; py++) {
-                float vertFrac = (float)(py - bounds.y) / bounds.height;
-                float density = 1.3f - vertFrac * 1.6f;
-                if (density <= 0f) break;
-                for (int px = bounds.x; px < bounds.x + bounds.width; px++) {
-                    int bx = ((int)(px / 1.5) + 4) & 7;
-                    int by = ((int)(py / 1.5) + 3) & 7;
-                    if (density > BAYER8[by][bx]) {
-                        g2.fillRect(px, py, 1, 1);
+            if (bounds.width > 0 && bounds.height > 0) {
+                Color darkerTone = new Color(curveColor.getRed(), curveColor.getGreen(), curveColor.getBlue(), 25);
+                if (ditherFillCache == null || ditherCacheW != w || ditherCacheH != h) {
+                    ditherFillCache = new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+                    ditherCacheW = w;
+                    ditherCacheH = h;
+                    Graphics2D cg = ditherFillCache.createGraphics();
+                    cg.setColor(darkerTone);
+                    for (int py = bounds.y; py < bounds.y + bounds.height; py++) {
+                        float vertFrac = (float)(py - bounds.y) / bounds.height;
+                        float density = 1.3f - vertFrac * 1.6f;
+                        if (density <= 0f) break;
+                        for (int px = bounds.x; px < bounds.x + bounds.width; px++) {
+                            int bx = ((int)(px / 1.5) + 4) & 7;
+                            int by = ((int)(py / 1.5) + 3) & 7;
+                            if (density > BAYER8[by][bx]) {
+                                cg.fillRect(px, py, 1, 1);
+                            }
+                        }
                     }
+                    cg.dispose();
                 }
+                java.awt.Shape oldClip2 = g2.getClip();
+                g2.clip(fillPath);
+                g2.drawImage(ditherFillCache, 0, 0, null);
+                g2.setClip(oldClip2);
             }
-            g2.setClip(oldClip2);
         } else {
             g2.setColor(fillColor);
             g2.fill(fillPath);
@@ -629,17 +667,20 @@ public class EnvelopeCanvas extends JComponent {
 
     private void syncEnvelopeArrays() {
         int n = envelope.coords.size();
-        envelope.times = new double[n];
-        envelope.values = new double[n];
+        // Reuse existing arrays if size hasn't changed
+        if (envelope.times == null || envelope.times.length != n) {
+            envelope.times = new double[n];
+            envelope.values = new double[n];
+            envelope.curves = new double[n];
+        }
         for (int i = 0; i < n; i++) {
             int[] coord = envelope.coords.get(i);
             envelope.times[i] = coord[0] / (double) COORD_X_MAX;
             envelope.values[i] = coordToValue(coord[1]);
         }
         // Sync curves array from segmentCurves list
-        envelope.curves = new double[n];
-        for (int i = 0; i < n && i < envelope.segmentCurves.size(); i++) {
-            envelope.curves[i] = envelope.segmentCurves.get(i);
+        for (int i = 0; i < n; i++) {
+            envelope.curves[i] = i < envelope.segmentCurves.size() ? envelope.segmentCurves.get(i) : 0.0;
         }
     }
 
@@ -728,6 +769,7 @@ public class EnvelopeCanvas extends JComponent {
             @Override
             public void mousePressed(MouseEvent e) {
                 requestFocusInWindow();
+                dragging = true; // disable AA during interaction
                 // Right-click: start panning (don't add nodes)
                 if (e.getButton() == MouseEvent.BUTTON3) {
                     if (e.getClickCount() == 2) {
@@ -854,7 +896,8 @@ public class EnvelopeCanvas extends JComponent {
                 selectedCoordIndex = -1;
                 draggedSegmentIndex = -1;
                 curveAdjustSegIndex = -1;
-                repaint();
+                dragging = false; // re-enable AA
+                repaint(); // final crisp render
             }
         });
 
@@ -926,9 +969,7 @@ public class EnvelopeCanvas extends JComponent {
                             envelope.segmentCurves.get(curveAdjustSegIndex) + deltaY * 0.01));
                     envelope.segmentCurves.set(curveAdjustSegIndex, newCurve);
                     curveAdjustStartY = e.getY();
-                    syncEnvelopeArrays();
-                    fireChangeListeners();
-                    repaint();
+                    fireChangeListeners(); // dirty flag set; timer handles repaint
                     return;
                 }
 
@@ -984,8 +1025,7 @@ public class EnvelopeCanvas extends JComponent {
                         segDragLastX = e.getX();
                     }
 
-                    fireChangeListeners();
-                    repaint();
+                    fireChangeListeners(); // dirty flag set; timer handles repaint
                     return;
                 }
 
@@ -1014,8 +1054,7 @@ public class EnvelopeCanvas extends JComponent {
                     if (!isAlt) {
                         selectedCoord[1] = snapCoordY(y);
                     }
-                    fireChangeListeners();
-                    repaint();
+                    fireChangeListeners(); // dirty flag set; timer handles repaint
                 }
             }
         });
@@ -1121,8 +1160,23 @@ public class EnvelopeCanvas extends JComponent {
         return (int) ((PITCH_SEMI_MAX - semi) / PITCH_SEMI_RANGE * 500);
     }
 
+    /** Mark canvas as needing repaint (timer checks this flag). */
+    public void markDirty() {
+        dirty = true;
+        // Note: ditherFillCache is NOT invalidated here — it's a size-dependent
+        // dithering pattern, not coord-dependent. It's clipped to fillPath at draw time.
+    }
+
+    @Override
+    public void repaint() {
+        dirty = true;
+        super.repaint();
+    }
+
     public void setWaveformData(float[] samples) {
         this.waveformData = samples;
+        waveformCacheDirty = true;
+        markDirty();
         repaint();
     }
 
@@ -1135,6 +1189,7 @@ public class EnvelopeCanvas extends JComponent {
     }
 
     private void fireChangeListeners() {
+        markDirty();
         ChangeEvent evt = new ChangeEvent(this);
         for (ChangeListener l : listeners) l.stateChanged(evt);
     }

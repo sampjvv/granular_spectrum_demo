@@ -52,7 +52,7 @@ public class WaveformDisplay extends JPanel {
                             Theme.BG_CARD, Theme.BORDER);
                     SynthwavePainter.paintBevel(g2, 0, 0, getWidth(), getHeight(), true);
                 } else if (Theme.isPaper()) {
-                    g2.setColor(Theme.BG_CARD);
+                    g2.setColor(com.sptc.uilab.tokens.PaperMinimalistTokens.PAPER);
                     g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
                             Theme.RADIUS_LG, Theme.RADIUS_LG);
                     g2.setStroke(new BasicStroke(

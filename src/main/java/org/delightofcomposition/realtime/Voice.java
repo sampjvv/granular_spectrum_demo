@@ -27,9 +27,9 @@ public class Voice {
     private double sourcePosition;   // fractional sample index into source
     private double sourceRate;       // playback rate for source at MIDI pitch
 
-    // Grain lifetime cap: 5 seconds preserves bell attack + reverb tail
-    // while preventing grains pitched down from hogging slots for 60+ seconds
-    private static final double MAX_GRAIN_DURATION_SEC = 5.0;
+    // Grain lifetime cap: 3 seconds preserves bell attack + reverb tail
+    // while allowing faster voice recycling for better polyphony
+    private static final double MAX_GRAIN_DURATION_SEC = 3.0;
     private static final int MAX_GRAIN_SAMPLES = (int) (MAX_GRAIN_DURATION_SEC * WaveWriter.SAMPLE_RATE);
 
     // Density rescaling: UI 100% maps to 10% of raw event probability
@@ -40,8 +40,9 @@ public class Voice {
     private Envelope dramaticEnvShape;
     private double dramaticDenom;
 
-    // Pre-allocated per-block grain render buffer (mono, summed before mix)
+    // Pre-allocated per-block buffers (mono, summed before mix)
     private final double[] grainBuffer = new double[1024];
+    private final double[] dramEnvBlock = new double[1024]; // pre-computed dramatic envelope
 
     // ADSR envelope
     private static final int ATTACK_SAMPLES = (int) (0.050 * WaveWriter.SAMPLE_RATE);
@@ -159,16 +160,30 @@ public class Voice {
         for (int i = 0; i < length; i++) grainBuffer[i] = 0;
         grainPool.renderAll(grainBuffer, length);
 
-        // ── 3. Pre-compute dramatic envelope at block boundaries ──
+        // ── 3. Pre-compute dramatic envelope for entire block ──
         boolean useDramatic = dramaticFactor > 0.001 && dramaticEnvShape != null;
-        double dramLinearStart = 0, dramLinearDelta = 0;
         double totalSamplesForSource = sourceDuration * WaveWriter.SAMPLE_RATE;
         if (useDramatic) {
             double posStart = Math.min(1.0, sampleCount / totalSamplesForSource);
             double posEnd = Math.min(1.0, (sampleCount + length) / totalSamplesForSource);
-            dramLinearStart = dramaticEnvShape.getValue(posStart);
+            double dramLinearStart = dramaticEnvShape.getValue(posStart);
             double dramLinearEnd = dramaticEnvShape.getValue(posEnd);
-            dramLinearDelta = (dramLinearEnd - dramLinearStart) / length;
+            // Compute at 64-sample granularity and linearly interpolate
+            int step = 64;
+            double prevVal = (Math.exp(dramaticFactor * dramLinearStart) - 1) / dramaticDenom;
+            for (int blockStart = 0; blockStart < length; blockStart += step) {
+                int blockEnd = Math.min(blockStart + step, length);
+                double frac = (double) blockEnd / length;
+                double linear = dramLinearStart + (dramLinearEnd - dramLinearStart) * frac;
+                double nextVal = (Math.exp(dramaticFactor * linear) - 1) / dramaticDenom;
+                double delta = (nextVal - prevVal) / (blockEnd - blockStart);
+                double val = prevVal;
+                for (int i = blockStart; i < blockEnd; i++) {
+                    dramEnvBlock[i] = val;
+                    val += delta;
+                }
+                prevVal = nextVal;
+            }
         }
 
         // ── 4. Mix, envelope, pan — per sample ──
@@ -191,11 +206,9 @@ public class Voice {
             // Blend granular and source
             double blended = (1.0 - mix) * granularVal + mix * sourceVal;
 
-            // Apply dramatic envelope
+            // Apply dramatic envelope (pre-computed)
             if (useDramatic) {
-                double linear = dramLinearStart + dramLinearDelta * i;
-                double expFunc = (Math.exp(dramaticFactor * linear) - 1) / dramaticDenom;
-                blended *= expFunc;
+                blended *= dramEnvBlock[i];
             }
 
             // Apply ADSR envelope and velocity
@@ -262,5 +275,15 @@ public class Voice {
 
     public int getMidiNote() {
         return midiNote;
+    }
+
+    /** True if voice is in RELEASE stage (candidate for stealing). */
+    public boolean isReleasing() {
+        return active && envStage == EnvStage.RELEASE;
+    }
+
+    /** Total samples rendered by this voice (age for voice-stealing priority). */
+    public double getAge() {
+        return sampleCount;
     }
 }

@@ -51,7 +51,7 @@ public class MidiInputHandler implements Receiver {
     }
 
     private void handleNoteOn(int note, int velocity) {
-        // Find a free voice
+        // 1. Try free voice
         for (Voice voice : voices) {
             if (!voice.isActive()) {
                 voice.noteOn(note, velocity);
@@ -59,7 +59,21 @@ public class MidiInputHandler implements Receiver {
                 return;
             }
         }
-        System.out.println("No free voices for note " + note);
+        // 2. Steal oldest releasing voice
+        Voice steal = null;
+        for (Voice voice : voices) {
+            if (voice.isReleasing() && (steal == null || voice.getAge() > steal.getAge()))
+                steal = voice;
+        }
+        // 3. Steal oldest active voice as last resort
+        if (steal == null) {
+            for (Voice voice : voices)
+                if (steal == null || voice.getAge() > steal.getAge()) steal = voice;
+        }
+        if (steal != null) {
+            steal.noteOn(note, velocity);
+            System.out.println("Note ON (stolen): " + note + " vel=" + velocity);
+        }
     }
 
     private void handleNoteOff(int note) {

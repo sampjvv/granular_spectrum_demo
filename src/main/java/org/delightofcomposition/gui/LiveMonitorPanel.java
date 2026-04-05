@@ -181,7 +181,7 @@ public class LiveMonitorPanel extends JPanel implements Scrollable {
     /** Start 100ms polling timer for activity display. */
     public void startPolling() {
         if (pollTimer != null) pollTimer.stop();
-        pollTimer = new Timer(100, e -> {
+        pollTimer = new Timer(250, e -> {
             if (liveController == null || !liveController.isRunning()) return;
 
             int voices = liveController.getActiveVoiceCount();

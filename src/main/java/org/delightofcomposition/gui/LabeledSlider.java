@@ -144,6 +144,8 @@ public class LabeledSlider extends JPanel {
      */
     private class SliderTrack extends JComponent {
         private boolean dragging;
+        private java.awt.image.BufferedImage trackCache;
+        private int cachedFillW = -1, cachedTrackW = -1;
 
         SliderTrack() {
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -225,29 +227,36 @@ public class LabeledSlider extends JPanel {
                 g2.fillRoundRect(padX, trackY, trackW, TRACK_H, TRACK_H, TRACK_H);
 
                 if (fillW > 0) {
-                    java.awt.Color dark = new java.awt.Color(0x55, 0x55, 0x55);
-                    java.awt.Color mid  = new java.awt.Color(0x99, 0x99, 0x99);
-                    Shape oldClip = g2.getClip();
-                    g2.setClip(new java.awt.geom.RoundRectangle2D.Float(padX, trackY, fillW, TRACK_H, TRACK_H, TRACK_H));
-                    for (int py = trackY; py < trackY + TRACK_H; py++) {
-                        for (int px = padX; px < padX + fillW; px++) {
-                            float intensity = (float)(px - padX) / Math.max(1, fillW + trackW);
-                            int bx = ((int)((px - padX) / 1.5)) & 7;
-                            int by = ((int)((py - trackY) / 1.5)) & 7;
-                            float threshold = BAYER8[by][bx];
-                            // 2-shade dither: transparent → mid → dark (left to right)
-                            float shadePos = intensity * 2f;
-                            if (shadePos < 1f) {
-                                if (shadePos > threshold) {
-                                    g2.setColor(mid);
-                                    g2.fillRect(px, py, 1, 1);
+                    if (trackCache == null || cachedFillW != fillW || cachedTrackW != trackW) {
+                        trackCache = new java.awt.image.BufferedImage(fillW, TRACK_H, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+                        cachedFillW = fillW;
+                        cachedTrackW = trackW;
+                        java.awt.Color dark = new java.awt.Color(0x55, 0x55, 0x55);
+                        java.awt.Color mid  = new java.awt.Color(0x99, 0x99, 0x99);
+                        java.awt.Graphics2D cg = trackCache.createGraphics();
+                        for (int py = 0; py < TRACK_H; py++) {
+                            for (int px = 0; px < fillW; px++) {
+                                float intensity = (float) px / Math.max(1, fillW + trackW);
+                                int bx = ((int)(px / 1.5)) & 7;
+                                int by = ((int)(py / 1.5)) & 7;
+                                float threshold = BAYER8[by][bx];
+                                float shadePos = intensity * 2f;
+                                if (shadePos < 1f) {
+                                    if (shadePos > threshold) {
+                                        cg.setColor(mid);
+                                        cg.fillRect(px, py, 1, 1);
+                                    }
+                                } else {
+                                    cg.setColor((shadePos - 1f) > threshold ? dark : mid);
+                                    cg.fillRect(px, py, 1, 1);
                                 }
-                            } else {
-                                g2.setColor((shadePos - 1f) > threshold ? dark : mid);
-                                g2.fillRect(px, py, 1, 1);
                             }
                         }
+                        cg.dispose();
                     }
+                    Shape oldClip = g2.getClip();
+                    g2.setClip(new java.awt.geom.RoundRectangle2D.Float(padX, trackY, fillW, TRACK_H, TRACK_H, TRACK_H));
+                    g2.drawImage(trackCache, padX, trackY, null);
                     g2.setClip(oldClip);
                 }
 

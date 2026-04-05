@@ -696,8 +696,8 @@ public class Theme {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
                 Color bgColor = getModel().isPressed() ? ZINC_700 : getModel().isRollover() ? BG_MUTED : BG_CARD;
-                if (!isEnabled()) bgColor = ZINC_900;
-                Color borderColor = isEnabled() ? BORDER : ZINC_800;
+                if (!isEnabled()) bgColor = BG_INPUT;
+                Color borderColor = isEnabled() ? BORDER : (isPaper() ? ZINC_500 : ZINC_800);
 
                 if (isSynthwave()) {
                     SynthwavePainter.paintSecondaryButton(g2, 0, 0, getWidth(), getHeight(),

@@ -43,6 +43,10 @@ public class TimbralPreview extends JComponent {
     private final double[] dotThresh;
     private final int dotCount;
 
+    // Paper dithered rendering cache
+    private java.awt.image.BufferedImage paperCache;
+    private int paperCacheW, paperCacheH;
+
     public TimbralPreview(Envelope probEnv, Envelope mixEnv,
                           Envelope dynamicsEnv, Supplier<Boolean> dynamicsEnabled,
                           Envelope pitchEnv, Supplier<Boolean> pitchEnabled) {
@@ -73,6 +77,12 @@ public class TimbralPreview extends JComponent {
                 idx++;
             }
         }
+    }
+
+    @Override
+    public void repaint() {
+        paperCache = null; // invalidate cache on any repaint request
+        super.repaint();
     }
 
     // Bayer 4x4 ordered dithering matrix (normalized 0-1)
@@ -214,6 +224,22 @@ public class TimbralPreview extends JComponent {
     private static final Color SOURCE_TINT_LIGHT = new Color(0x90, 0xB8, 0xA0, 25);
 
     private void paintPaperDithered(Graphics2D g2, int w, int h) {
+        if (paperCache != null && paperCacheW == w && paperCacheH == h) {
+            g2.drawImage(paperCache, 0, 0, null);
+            return;
+        }
+
+        paperCache = new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        paperCacheW = w;
+        paperCacheH = h;
+        Graphics2D cg = paperCache.createGraphics();
+        cg.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        paintPaperDitheredImpl(cg, w, h);
+        cg.dispose();
+        g2.drawImage(paperCache, 0, 0, null);
+    }
+
+    private void paintPaperDitheredImpl(Graphics2D g2, int w, int h) {
         g2.setColor(Color.WHITE);
         g2.fillRoundRect(0, 0, w - 1, h - 1,
                 PaperMinimalistTokens.RADIUS_SM, PaperMinimalistTokens.RADIUS_SM);

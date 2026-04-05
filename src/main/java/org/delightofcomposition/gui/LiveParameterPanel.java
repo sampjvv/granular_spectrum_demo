@@ -285,7 +285,7 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
     /** Start polling ControlState to sync sliders when MIDI CC changes them externally. */
     public void startSync() {
         if (syncTimer != null) syncTimer.stop();
-        syncTimer = new Timer(100, e -> {
+        syncTimer = new Timer(250, e -> {
             if (liveController == null || liveController.getControlState() == null) return;
             ControlState cs = liveController.getControlState();
 

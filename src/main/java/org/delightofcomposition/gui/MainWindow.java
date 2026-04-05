@@ -696,7 +696,7 @@ public class MainWindow extends JFrame {
 
                     // Start toolbar status timer
                     if (liveStatusTimer != null) liveStatusTimer.stop();
-                    liveStatusTimer = new Timer(100, ev -> {
+                    liveStatusTimer = new Timer(250, ev -> {
                         if (liveController.isRunning()) {
                             voiceCountLabel.setText("Voices: " + liveController.getActiveVoiceCount()
                                 + "/" + liveController.getMaxVoices());
