@@ -56,12 +56,16 @@ public class RenderController {
                     if (snap.useDynamicsEnv && snap.dynamicsPerVoice) {
                         rawCopy = snap.usePalindrome ? Arrays.copyOf(sound, sound.length) : null;
                         applyDynamicsToMono(sound, origlen, snap);
+                    } else if (snap.usePalindrome && snap.useDynamicsEnv) {
+                        // Match harmonic palindrome: dynamics on forward, raw on reverse
+                        rawCopy = Arrays.copyOf(sound, sound.length);
+                        applyDynamicsToMono(sound, origlen, snap);
                     }
 
                     // Palindrome
                     if (snap.usePalindrome) {
                         double[] pre = (rawCopy != null) ? rawCopy : Arrays.copyOf(sound, sound.length);
-                        sound = applyPalindrome(sound, pre, origlen, snap.crossfadeDuration);
+                        sound = applyPalindrome(sound, pre, sound.length, snap.crossfadeDuration);
                     }
 
                     // Calculate needed buffer length
@@ -78,7 +82,7 @@ public class RenderController {
                     }
 
                     // Post-mix dynamics (only if not already applied per-voice)
-                    if (snap.useDynamicsEnv && !snap.dynamicsPerVoice)
+                    if (snap.useDynamicsEnv && !snap.dynamicsPerVoice && !snap.usePalindrome)
                         applyDynamicsEnvelope(ww.df, snap.dynamicsEnv, origlen, snap);
                     return ww.getBuffer();
                 } else {
@@ -171,7 +175,7 @@ public class RenderController {
                     boolean doPalindrome = (n > 0) || snap.usePalindrome;
                     if (doPalindrome) {
                         double[] pre = (rawCopy != null) ? rawCopy : Arrays.copyOf(sound, sound.length);
-                        sound = applyPalindrome(sound, pre, sampleLen, snap.crossfadeDuration);
+                        sound = applyPalindrome(sound, pre, sound.length, snap.crossfadeDuration);
                     }
                 }
 
@@ -202,7 +206,7 @@ public class RenderController {
                     if (snap.useDynamicsEnv) {
                         applyDynamicsToMono(forwardSound, sampleLen, snap);
                     }
-                    sound = applyPalindrome(forwardSound, rawSound, sampleLen, snap.crossfadeDuration);
+                    sound = applyPalindrome(forwardSound, rawSound, sound.length, snap.crossfadeDuration);
 
                     int startForEndAlignment = fundLen - sampleLen;
                     if (startForEndAlignment >= 0) {
@@ -226,7 +230,7 @@ public class RenderController {
                     if (snap.useDynamicsEnv) {
                         applyDynamicsToMono(sound, sampleLen, snap);
                     }
-                    sound = applyPalindrome(sound, rawCopy, sampleLen, snap.crossfadeDuration);
+                    sound = applyPalindrome(sound, rawCopy, sound.length, snap.crossfadeDuration);
                     sampleLen = sound.length;
                 }
             }
