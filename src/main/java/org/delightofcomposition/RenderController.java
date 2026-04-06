@@ -87,7 +87,7 @@ public class RenderController {
                     return ww.getBuffer();
                 } else {
                     // Chord mode — mirrors Main.java experiment2 logic
-                    return renderChord(snap, sample, origlen);
+                    return renderChord(snap, sample, origlen, pct -> publish(pct));
                 }
             }
 
@@ -123,18 +123,24 @@ public class RenderController {
         worker.execute();
     }
 
-    private float[][] renderChord(SynthParameters snap, double[] origSample, int origlen) {
-        double[] ratios = snap.chordRatios;
+    private float[][] renderChord(SynthParameters snap, double[] origSample, int origlen,
+                                     java.util.function.Consumer<Integer> progress) {
+        double[] ratios = snap.computeChordRatios();
         double[] attacktimes = snap.chordAttackTimes;
         int fundLen = origlen;
+
+        // Account for pitch envelope in voice length estimation
+        double avgPitchRatio = Demo.computeAvgPitchRatio(snap.pitchEnv, snap.usePitchEnv);
 
         // Estimate total buffer length needed
         int maxLen = 0;
         for (int n = 0; n < ratios.length; n++) {
-            int voiceLen = (int) (origlen / ratios[n]);
-            int attackOffset = (int) (attacktimes[n] * WaveWriter.SAMPLE_RATE);
-            if (n > 0) {
-                // forward + reverse with crossfade
+            double r = (n < ratios.length) ? Math.max(0.05, Math.min(50, ratios[n])) : 1.0;
+            int voiceLen = (int) (origlen / (r * avgPitchRatio));
+            double at = (n < attacktimes.length) ? Math.max(0, Math.min(120, attacktimes[n])) : 0;
+            int attackOffset = (int) (at * WaveWriter.SAMPLE_RATE);
+            boolean willPalindrome = (n == 0) ? snap.usePalindrome : snap.chordHarmonicsPalindrome;
+            if (willPalindrome) {
                 voiceLen = voiceLen * 2;
             }
             maxLen = Math.max(maxLen, voiceLen + attackOffset);
@@ -142,56 +148,67 @@ public class RenderController {
         maxLen += WaveWriter.SAMPLE_RATE * 30; // reverb tail margin
 
         WaveWriter ww = new WaveWriter("_render_chord", maxLen);
+        int maxWrittenIdx = 0;
 
         for (int n = 0; n < ratios.length; n++) {
             if (Demo.cancelled) return null;
 
-            double ratio = ratios[n];
-            double attackTime = attacktimes[n];
-            double[] sample = ReadSound.readSoundDoubles(snap.sourceFile.getPath());
-            sample = extractRegion(sample, snap);
-            sample = ChangeSpeed.changeSpeed(sample, ratio, 1);
+            double ratio = Math.max(0.05, Math.min(50, ratios[n]));
+            double attackTime = (n < attacktimes.length) ? Math.max(0, Math.min(120, attacktimes[n])) : 0;
+            double[] sample = ChangeSpeed.changeSpeed(
+                    Arrays.copyOf(origSample, origSample.length), ratio, 1);
             int sampleLen = sample.length;
 
-            // Use crisp attack envelope for non-fundamental voices
+            // Per-voice progress: map each voice's 0-100% to a slice of overall progress
+            final int voiceN = n;
+            final int totalVoices = ratios.length;
+            java.util.function.Consumer<Integer> voiceProgress = progress != null ? pct -> {
+                int overall = (voiceN * 100 + pct) / totalVoices;
+                progress.accept(Math.min(99, overall));
+            } : null;
+
+            // Envelope mode: "crisp" uses crisp envelopes for harmonics, "shared" uses main envelopes
             double[] sound;
-            if (n == 0) {
-                sound = Demo.demo(sample, snap, null);
+            boolean useCrisp = n > 0 && "crisp".equals(snap.chordEnvelopeMode);
+            if (n == 0 || !useCrisp) {
+                sound = Demo.demo(sample, snap, voiceProgress);
             } else {
                 SynthParameters voiceParams = snap.snapshot();
                 voiceParams.probEnv = snap.crispProbEnv;
                 voiceParams.mixEnv = snap.crispMixEnv;
-                sound = Demo.demo(sample, voiceParams, null);
+                sound = Demo.demo(sample, voiceParams, voiceProgress);
             }
             if (sound == null) return null;
 
+            // Determine if this voice gets palindrome
+            boolean doPalindrome = (n == 0) ? snap.usePalindrome : snap.chordHarmonicsPalindrome;
+
             // Per-voice dynamics
             if (snap.useDynamicsEnv && snap.dynamicsPerVoice) {
-                double[] rawCopy = snap.usePalindrome ? Arrays.copyOf(sound, sound.length) : null;
+                double[] rawCopy = doPalindrome ? Arrays.copyOf(sound, sound.length) : null;
                 applyDynamicsToMono(sound, sampleLen, snap);
 
-                if (n > 0 || snap.usePalindrome) {
-                    // Palindrome for harmonics (always) or fundamental (if toggled)
-                    boolean doPalindrome = (n > 0) || snap.usePalindrome;
-                    if (doPalindrome) {
-                        double[] pre = (rawCopy != null) ? rawCopy : Arrays.copyOf(sound, sound.length);
-                        sound = applyPalindrome(sound, pre, sound.length, snap.crossfadeDuration, snap.crossfadeCurve, snap.crossfadeOverlap);
-                    }
+                if (doPalindrome) {
+                    double[] pre = (rawCopy != null) ? rawCopy : Arrays.copyOf(sound, sound.length);
+                    sound = applyPalindrome(sound, pre, sound.length, snap.crossfadeDuration, snap.crossfadeCurve, snap.crossfadeOverlap);
                 }
 
                 // Soft attack fill for harmonics
-                if (n > 0) {
+                if (n > 0 && snap.chordSoftAttackFill) {
                     int startForEndAlignment = fundLen - sampleLen;
                     if (startForEndAlignment >= 0) {
-                        sample = ReadSound.readSoundDoubles(snap.sourceFile.getPath());
-                        sample = extractRegion(sample, snap);
-                        sample = ChangeSpeed.changeSpeed(sample, ratio, 1);
-                        double[] softAttack = Demo.demo(sample, snap, null);
+                        double[] saSample = ChangeSpeed.changeSpeed(
+                                Arrays.copyOf(origSample, origSample.length), ratio, 1);
+                        double[] softAttack = Demo.demo(saSample, snap, null);
                         if (softAttack == null) return null;
                         applyDynamicsToMono(softAttack, sampleLen, snap);
+                        double voiceGain = (n < snap.chordGains.length) ? snap.chordGains[n] : 1.0;
+                        double panPos = (n < snap.chordPans.length) ? snap.chordPans[n] : 0.0;
                         for (int i = 0; i < softAttack.length && (startForEndAlignment + i) < ww.df[0].length; i++) {
-                            ww.df[0][startForEndAlignment + i] += (float) softAttack[i];
-                            ww.df[1][startForEndAlignment + i] += (float) softAttack[i];
+                            int writeIdx = startForEndAlignment + i;
+                            double pan = computeVoicePan(i, sampleLen, snap.panSmoothing, panPos);
+                            ww.df[0][writeIdx] += (float) (pan * softAttack[i] * voiceGain);
+                            ww.df[1][writeIdx] += (float) ((1 - pan) * softAttack[i] * voiceGain);
                         }
                     }
                 }
@@ -199,33 +216,38 @@ public class RenderController {
                 sampleLen = sound.length;
             } else {
                 // No per-voice dynamics — apply dynamics to forward pass for palindrome
-                if (n > 0) {
+                if (doPalindrome && n > 0) {
                     double[] rawSound = Arrays.copyOf(sound, sampleLen);
                     double[] forwardSound = Arrays.copyOf(sound, sound.length);
-                    // Apply dynamics to forward pass (matches old dramatic envelope behavior)
                     if (snap.useDynamicsEnv) {
                         applyDynamicsToMono(forwardSound, sampleLen, snap);
                     }
                     sound = applyPalindrome(forwardSound, rawSound, sound.length, snap.crossfadeDuration, snap.crossfadeCurve, snap.crossfadeOverlap);
 
-                    int startForEndAlignment = fundLen - sampleLen;
-                    if (startForEndAlignment >= 0) {
-                        sample = ReadSound.readSoundDoubles(snap.sourceFile.getPath());
-                        sample = extractRegion(sample, snap);
-                        sample = ChangeSpeed.changeSpeed(sample, ratio, 1);
-                        double[] softAttack = Demo.demo(sample, snap, null);
-                        if (softAttack == null) return null;
-                        if (snap.useDynamicsEnv) {
-                            applyDynamicsToMono(softAttack, sampleLen, snap);
-                        }
-                        for (int i = 0; i < softAttack.length && (startForEndAlignment + i) < ww.df[0].length; i++) {
-                            ww.df[0][startForEndAlignment + i] += (float) softAttack[i];
-                            ww.df[1][startForEndAlignment + i] += (float) softAttack[i];
+                    if (snap.chordSoftAttackFill) {
+                        int startForEndAlignment = fundLen - sampleLen;
+                        if (startForEndAlignment >= 0) {
+                            double[] saSample = ChangeSpeed.changeSpeed(
+                                    Arrays.copyOf(origSample, origSample.length), ratio, 1);
+                            double[] softAttack = Demo.demo(saSample, snap, null);
+                            if (softAttack == null) return null;
+                            if (snap.useDynamicsEnv) {
+                                applyDynamicsToMono(softAttack, sampleLen, snap);
+                            }
+                            double voiceGain = (n < snap.chordGains.length) ? snap.chordGains[n] : 1.0;
+                            double panPos = (n < snap.chordPans.length) ? snap.chordPans[n] : 0.0;
+                            for (int i = 0; i < softAttack.length && (startForEndAlignment + i) < ww.df[0].length; i++) {
+                                int writeIdx = startForEndAlignment + i;
+                                double pan = computeVoicePan(i, sampleLen, snap.panSmoothing, panPos);
+                                ww.df[0][writeIdx] += (float) (pan * softAttack[i] * voiceGain);
+                                ww.df[1][writeIdx] += (float) ((1 - pan) * softAttack[i] * voiceGain);
+                            }
                         }
                     }
 
                     sampleLen = sound.length;
-                } else if (snap.usePalindrome) {
+                } else if (doPalindrome) {
+                    // Fundamental with palindrome
                     double[] rawCopy = Arrays.copyOf(sound, sound.length);
                     if (snap.useDynamicsEnv) {
                         applyDynamicsToMono(sound, sampleLen, snap);
@@ -233,24 +255,36 @@ public class RenderController {
                     sound = applyPalindrome(sound, rawCopy, sound.length, snap.crossfadeDuration, snap.crossfadeCurve, snap.crossfadeOverlap);
                     sampleLen = sound.length;
                 }
+                // else: no palindrome, no per-voice dynamics — sound stays as-is
             }
 
+            // Write voice to stereo buffer with per-voice gain and pan
+            double voiceGain = (n < snap.chordGains.length) ? snap.chordGains[n] : 1.0;
+            double panPos = (n < snap.chordPans.length) ? snap.chordPans[n] : 0.0;
             for (int i = 0; i < sound.length; i++) {
                 int writeIdx = i + (int) (attackTime * WaveWriter.SAMPLE_RATE);
                 if (writeIdx >= ww.df[0].length) break;
-                double pan = Math.min(
-                        snap.panSmoothing * 0.5
-                                + (1 - snap.panSmoothing) * 0.5 * (i / (double) sampleLen),
-                        1);
-                if (n % 2 == 1) pan = 1 - pan;
-                ww.df[0][writeIdx] += (float) (pan * sound[i]);
-                ww.df[1][writeIdx] += (float) ((1 - pan) * sound[i]);
+                double pan = computeVoicePan(i, sampleLen, snap.panSmoothing, panPos);
+                ww.df[0][writeIdx] += (float) (pan * sound[i] * voiceGain);
+                ww.df[1][writeIdx] += (float) ((1 - pan) * sound[i] * voiceGain);
+                maxWrittenIdx = Math.max(maxWrittenIdx, writeIdx);
             }
         }
 
         if (snap.useDynamicsEnv && !snap.dynamicsPerVoice)
-            applyDynamicsEnvelope(ww.df, snap.dynamicsEnv, fundLen, snap);
+            applyDynamicsEnvelope(ww.df, snap.dynamicsEnv, Math.max(fundLen, maxWrittenIdx), snap);
         return ww.getBuffer();
+    }
+
+    /**
+     * Compute pan position for a voice sample, blending time-sweep with per-voice position.
+     * panPos: -1.0 (full left) to +1.0 (full right), 0.0 = center.
+     */
+    private static double computeVoicePan(int sampleIdx, int refLen, double panSmoothing, double panPos) {
+        double timePan = panSmoothing * 0.5
+                + (1 - panSmoothing) * 0.5 * (sampleIdx / (double) refLen);
+        double offset = panPos * 0.5; // scale -1..+1 to -0.5..+0.5
+        return Math.max(0, Math.min(1, timePan + offset));
     }
 
     /**
@@ -285,6 +319,9 @@ public class RenderController {
             double crossfadeCurve, double overlap) {
         int crossFadeSamples = (int) (crossfadeDuration * WaveWriter.SAMPLE_RATE);
         double[] truncatedRaw = Arrays.copyOf(rawSound, Math.min(rawSound.length, sampleLen));
+
+        // Clamp crossfade to not exceed either buffer
+        crossFadeSamples = Math.min(crossFadeSamples, Math.min(forwardSound.length, truncatedRaw.length));
 
         double[] result = new double[forwardSound.length + truncatedRaw.length - crossFadeSamples];
         double curveExp = Math.exp(-crossfadeCurve);

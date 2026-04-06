@@ -37,13 +37,24 @@ public class PresetManager {
         props.setProperty("dynamicsExponential", String.valueOf(params.dynamicsExponential));
         props.setProperty("dynamicsPerVoice", String.valueOf(params.dynamicsPerVoice));
         props.setProperty("useChordMode", String.valueOf(params.useChordMode));
-        props.setProperty("chordRatios", arrayToString(params.chordRatios));
+        props.setProperty("chordOvertoneMode", String.valueOf(params.chordOvertoneMode));
+        props.setProperty("chordHarmonics", intArrayToString(params.chordHarmonics));
+        props.setProperty("chordIntervals", intArrayToString(params.chordIntervals));
+        props.setProperty("chordOctaves", intArrayToString(params.chordOctaves));
+        props.setProperty("chordTuning", params.chordTuning);
         props.setProperty("chordAttackTimes", arrayToString(params.chordAttackTimes));
+        props.setProperty("chordGains", arrayToString(params.chordGains));
+        props.setProperty("chordPans", arrayToString(params.chordPans));
+        props.setProperty("chordHarmonicsPalindrome", String.valueOf(params.chordHarmonicsPalindrome));
+        props.setProperty("chordSoftAttackFill", String.valueOf(params.chordSoftAttackFill));
+        props.setProperty("chordEnvelopeMode", params.chordEnvelopeMode);
 
         // Envelopes
         saveEnvelope(props, "probEnv", params.probEnv);
         saveEnvelope(props, "mixEnv", params.mixEnv);
         saveEnvelope(props, "dramaticEnvShape", params.dramaticEnvShape);
+        saveEnvelope(props, "crispProbEnv", params.crispProbEnv);
+        saveEnvelope(props, "crispMixEnv", params.crispMixEnv);
         saveEnvelope(props, "dynamicsEnv", params.dynamicsEnv);
         props.setProperty("useDynamicsEnv", String.valueOf(params.useDynamicsEnv));
         saveEnvelope(props, "pitchEnv", params.pitchEnv);
@@ -107,15 +118,33 @@ public class PresetManager {
                 props.getProperty("dynamicsPerVoice", "false"));
         params.useChordMode = Boolean.parseBoolean(
                 props.getProperty("useChordMode", String.valueOf(params.useChordMode)));
-        params.chordRatios = parseDoubleArray(
-                props.getProperty("chordRatios", arrayToString(params.chordRatios)));
+        params.chordOvertoneMode = Boolean.parseBoolean(
+                props.getProperty("chordOvertoneMode", "true"));
+        params.chordHarmonics = parseIntArray(
+                props.getProperty("chordHarmonics", intArrayToString(params.chordHarmonics)));
+        params.chordIntervals = parseIntArray(
+                props.getProperty("chordIntervals", intArrayToString(params.chordIntervals)));
+        params.chordOctaves = parseIntArray(
+                props.getProperty("chordOctaves", intArrayToString(params.chordOctaves)));
+        params.chordTuning = props.getProperty("chordTuning", "just");
         params.chordAttackTimes = parseDoubleArray(
                 props.getProperty("chordAttackTimes", arrayToString(params.chordAttackTimes)));
+        params.chordGains = parseDoubleArray(
+                props.getProperty("chordGains", arrayToString(params.chordGains)));
+        params.chordPans = parseDoubleArray(
+                props.getProperty("chordPans", arrayToString(params.chordPans)));
+        params.chordHarmonicsPalindrome = Boolean.parseBoolean(
+                props.getProperty("chordHarmonicsPalindrome", "true"));
+        params.chordSoftAttackFill = Boolean.parseBoolean(
+                props.getProperty("chordSoftAttackFill", "true"));
+        params.chordEnvelopeMode = props.getProperty("chordEnvelopeMode", "crisp");
 
         // Envelopes
         params.probEnv = loadEnvelope(props, "probEnv", params.probEnv);
         params.mixEnv = loadEnvelope(props, "mixEnv", params.mixEnv);
         params.dramaticEnvShape = loadEnvelope(props, "dramaticEnvShape", params.dramaticEnvShape);
+        params.crispProbEnv = loadEnvelope(props, "crispProbEnv", params.crispProbEnv);
+        params.crispMixEnv = loadEnvelope(props, "crispMixEnv", params.crispMixEnv);
         params.dynamicsEnv = loadEnvelope(props, "dynamicsEnv", params.dynamicsEnv);
         params.useDynamicsEnv = Boolean.parseBoolean(
                 props.getProperty("useDynamicsEnv", "true"));
@@ -162,6 +191,24 @@ public class PresetManager {
             sb.append(arr[i]);
         }
         return sb.toString();
+    }
+
+    private static String intArrayToString(int[] arr) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < arr.length; i++) {
+            if (i > 0) sb.append(",");
+            sb.append(arr[i]);
+        }
+        return sb.toString();
+    }
+
+    private static int[] parseIntArray(String text) {
+        String[] parts = text.split(",");
+        int[] result = new int[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            result[i] = Integer.parseInt(parts[i].trim());
+        }
+        return result;
     }
 
     private static double[] parseDoubleArray(String text) {

@@ -47,6 +47,7 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
     private final ToggleSwitch pitchToggle;
     private JPanel densityCard, mixCard, dynamicsCard, pitchCard;
     private boolean stacked = false;
+    private Runnable chordModeUpdate;
 
     public EnvelopeEditorPanel(SynthParameters params) {
         this.params = params;
@@ -185,15 +186,14 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
             relayout.run();
         });
 
-        // Poll chord mode state to show/hide apply button
-        javax.swing.Timer chordPoll = new javax.swing.Timer(200, e -> {
+        // Update apply button visibility when chord mode changes
+        chordModeUpdate = () -> {
             boolean shouldShow = params.useChordMode;
             if (applyBtn.isVisible() != shouldShow) {
                 applyBtn.setVisible(shouldShow);
                 relayout.run();
             }
-        });
-        chordPoll.start();
+        };
 
         relayout.run(); // initial layout
 
@@ -527,6 +527,10 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
 
     public TimbralPreview getTimbralPreview() {
         return timbralPreview;
+    }
+
+    public void onChordModeChanged() {
+        if (chordModeUpdate != null) chordModeUpdate.run();
     }
 
     public void setWaveformData(float[] samples) {

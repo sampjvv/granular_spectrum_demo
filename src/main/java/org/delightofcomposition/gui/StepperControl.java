@@ -41,6 +41,7 @@ public class StepperControl extends JPanel {
     private final boolean intMode;
     private final JTextField valueField;
     private final List<ChangeListener> listeners = new ArrayList<>();
+    private String[] labels; // optional named labels for discrete values
 
     /** Double constructor with format string. */
     public StepperControl(double val, double min, double max, double step, String format) {
@@ -138,7 +139,17 @@ public class StepperControl extends JPanel {
         valueField.setPreferredSize(new Dimension(80, BTN_SIZE));
     }
 
+    /** Set named labels for discrete values (index 0 = min value). */
+    public void setLabels(String[] labels) {
+        this.labels = labels;
+        valueField.setText(formatValue());
+    }
+
     private String formatValue() {
+        if (labels != null) {
+            int idx = (int) value - (int) min;
+            if (idx >= 0 && idx < labels.length) return labels[idx];
+        }
         if (intMode) return String.format(format, (int) value);
         return String.format(format, value);
     }

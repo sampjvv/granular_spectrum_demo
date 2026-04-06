@@ -515,6 +515,7 @@ public class MainWindow extends JFrame {
         Theme.styleScrollPane(leftScroll);
 
         envelopePanel = new EnvelopeEditorPanel(params);
+        parameterPanel.setChordModeChangeListener(() -> envelopePanel.onChordModeChanged());
         waveformDisplay = new WaveformDisplay();
 
         envelopeScroll = new JScrollPane(envelopePanel);
