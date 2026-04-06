@@ -47,7 +47,6 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
     private final ToggleSwitch pitchToggle;
     private JPanel densityCard, mixCard, dynamicsCard, pitchCard;
     private boolean stacked = false;
-    private Runnable chordModeUpdate;
 
     public EnvelopeEditorPanel(SynthParameters params) {
         this.params = params;
@@ -131,16 +130,6 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
         Theme.tagFont(curveBtn, "small");
         curveBtn.setPreferredSize(new Dimension(90, 24));
 
-        // Apply mode button (visible only in chord mode)
-        JButton applyBtn = Theme.ghostButton(params.dynamicsPerVoice ? "Per-voice" : "Post-mix");
-        Theme.tagFont(applyBtn, "small");
-        applyBtn.setPreferredSize(new Dimension(80, 24));
-        applyBtn.addActionListener(e -> {
-            params.dynamicsPerVoice = !params.dynamicsPerVoice;
-            applyBtn.setText(params.dynamicsPerVoice ? "Per-voice" : "Post-mix");
-        });
-        applyBtn.setVisible(params.useChordMode);
-
         // Exponent factor slider (hidden until exponential mode)
         LabeledSlider exponentSlider = new LabeledSlider("Factor", 1, 2000,
                 (int) (params.dramaticFactor * 100),
@@ -151,29 +140,14 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
                 params.dramaticFactor = exponentSlider.getValue() / 100.0);
         exponentSlider.setVisible(params.dynamicsExponential);
 
-        // Layout helper: arranges buttons + slider based on mode
+        // Layout helper: arranges button + slider based on mode
         Runnable relayout = () -> {
             dynOptions.removeAll();
             if (params.dynamicsExponential) {
-                // Exponential: stack buttons vertically on the left, slider on the right
-                JPanel btnCol = new JPanel();
-                btnCol.setLayout(new BoxLayout(btnCol, BoxLayout.Y_AXIS));
-                btnCol.setOpaque(false);
-                curveBtn.setMaximumSize(new Dimension(90, 24));
-                btnCol.add(curveBtn);
-                if (applyBtn.isVisible()) {
-                    applyBtn.setMaximumSize(new Dimension(90, 24));
-                    btnCol.add(Box.createVerticalStrut(2));
-                    btnCol.add(applyBtn);
-                }
-                dynOptions.add(btnCol);
+                dynOptions.add(curveBtn);
                 dynOptions.add(exponentSlider);
             } else {
-                // Linear: buttons side by side horizontally
                 dynOptions.add(curveBtn);
-                if (applyBtn.isVisible()) {
-                    dynOptions.add(applyBtn);
-                }
             }
             dynOptions.revalidate();
             dynOptions.repaint();
@@ -186,20 +160,10 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
             relayout.run();
         });
 
-        // Update apply button visibility when chord mode changes
-        chordModeUpdate = () -> {
-            boolean shouldShow = params.useChordMode;
-            if (applyBtn.isVisible() != shouldShow) {
-                applyBtn.setVisible(shouldShow);
-                relayout.run();
-            }
-        };
-
         relayout.run(); // initial layout
 
         help.register(curveBtn, "Linear: direct gain. Exponential: applies an exponential curve for more dramatic shaping.");
         help.register(exponentSlider, "Controls the steepness of exponential shaping. Higher = more aggressive attack/decay contrast.");
-        help.register(applyBtn, "Post-mix: shapes the final output. Per-voice: shapes each chord voice independently before mixing.");
 
         dynamicsCard.add(dynOptions, BorderLayout.SOUTH);
         dynamicsCard.setMinimumSize(new Dimension(350, 180));
@@ -527,10 +491,6 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
 
     public TimbralPreview getTimbralPreview() {
         return timbralPreview;
-    }
-
-    public void onChordModeChanged() {
-        if (chordModeUpdate != null) chordModeUpdate.run();
     }
 
     public void setWaveformData(float[] samples) {

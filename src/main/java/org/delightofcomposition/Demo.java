@@ -306,13 +306,6 @@ public class Demo {
         }
     }
 
-    public static double[] demoCrispAttack(double[] fullSound) {
-        Envelope probEnv = new Envelope(new double[] { 0, 0.1, 0.6, 0.8, 0.9, 0.91 },
-                new double[] { 1, 0.05, 0.1, 1, 1, 0 });
-        Envelope mixEnv = new Envelope(new double[] { 0, 0.7, 0.9 }, new double[] { 0, 0, 1 });
-        return demo(fullSound, probEnv, mixEnv);
-    }
-
     /**
      * Renders a single granular texture layer (pure granular, no source mix).
      * The layerDensity controls grain placement probability (e.g. 0.05 for a sparse
