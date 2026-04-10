@@ -1,5 +1,7 @@
 package org.delightofcomposition.realtime;
 
+import java.util.Random;
+
 import org.delightofcomposition.envelopes.Envelope;
 import org.delightofcomposition.sound.WaveWriter;
 
@@ -18,6 +20,8 @@ public class Voice {
 
     // Grain synthesis
     private GrainSchedule schedule;
+    private ControlState controls;
+    private final Random reverseRng = new Random();
     private final GrainPool grainPool = new GrainPool(MAX_GRAINS);
     private double pitchRatio;       // midiFreq / sourceFundamental
     private int nextEventIndex;      // pointer into schedule events
@@ -72,6 +76,10 @@ public class Voice {
         this.dramaticEnvShape = dramaticEnvShape;
         this.dramaticDenom = (dramaticFactor > 0.001)
                 ? (Math.exp(dramaticFactor) - 1) : 1.0;
+    }
+
+    public void setControls(ControlState controls) {
+        this.controls = controls;
     }
 
     // Legacy compatibility — not used with grain schedule path
@@ -138,6 +146,7 @@ public class Voice {
 
         // ── 1. Spawn grains for events within this block's time range ──
         double effectiveDensity = density * DENSITY_SCALE;
+        double reverseAmt = (controls != null) ? controls.getReverseAmount() : 0.0;
         GrainSchedule.GrainEvent[] events = schedule.getEvents();
         while (nextEventIndex < events.length
                 && events[nextEventIndex].time <= blockEndTimeSec) {
@@ -151,9 +160,14 @@ public class Voice {
             // peakFreq × (midiFreq / sourceFundamental) / bellOrigFreq
             double grainRate = event.frequency * pitchRatio / schedule.getBellOrigFreq();
 
+            // Probabilistic reverse: random threshold against reverseAmount
+            boolean reverse = reverseAmt > 0 && reverseRng.nextDouble() < reverseAmt;
+            double[] dry = reverse ? schedule.getBellDryReverse() : schedule.getBellDry();
+            double[] wet = reverse ? schedule.getBellWetReverse() : schedule.getBellWet();
+
             grainPool.spawn(grainRate, event.amplitude, MAX_GRAIN_SAMPLES,
-                    schedule.getBellDry(), schedule.getBellWet(),
-                    schedule.isUseReverb(), schedule.getReverbMix());
+                    dry, wet,
+                    schedule.isUseReverb(), schedule.getReverbMix(), reverse);
         }
 
         // ── 2. Render all active grains into mono buffer ──
@@ -201,6 +215,29 @@ public class Voice {
                     sourceVal = sourceBuf[srcIdx] * (1 - frac) + sourceBuf[srcIdx + 1] * frac;
                 }
                 sourcePosition += sourceRate;
+
+                // Source looping with crossfade
+                if (controls != null && controls.isSourceLoop()) {
+                    int loopEnd = (int) (controls.getSourceLoopEnd() * sourceBuf.length);
+                    int loopStart = (int) (controls.getSourceLoopStart() * sourceBuf.length);
+                    loopEnd = Math.min(loopEnd, sourceBuf.length - 1);
+                    int CF = 2400; // ~50ms crossfade
+
+                    if (srcIdx >= loopEnd - CF && srcIdx < loopEnd) {
+                        int dist = loopEnd - srcIdx;
+                        double fadeOut = dist / (double) CF;
+                        int cfIdx = loopStart + (CF - dist);
+                        if (cfIdx + 1 < sourceBuf.length) {
+                            double f = sourcePosition - srcIdx;
+                            double lv = sourceBuf[cfIdx] * (1 - f) + sourceBuf[cfIdx + 1] * f;
+                            sourceVal = sourceVal * fadeOut + lv * (1.0 - fadeOut);
+                        }
+                    }
+
+                    if (sourcePosition >= loopEnd) {
+                        sourcePosition = loopStart + CF;
+                    }
+                }
             }
 
             // Blend granular and source

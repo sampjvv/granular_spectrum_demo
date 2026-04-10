@@ -7,6 +7,9 @@ package org.delightofcomposition.realtime;
 public class Grain {
     // Fade-out over last ~50ms to prevent clicks when grain lifetime expires
     private static final int FADE_SAMPLES = 2400;
+    // Reverse grain envelope
+    private static final int REVERSE_FADE_IN_SAMPLES = 12000;  // ~250ms
+    private static final int REVERSE_FADE_OUT_SAMPLES = 1200;  // ~25ms
 
     double position;      // fractional read position in bell sample
     double playbackRate;  // samples to advance per output sample
@@ -21,6 +24,7 @@ public class Grain {
     int bellLength;       // effective length (dry or wet, whichever is in use)
     boolean useReverb;
     double reverbMix;
+    boolean reverse;
 
     public Grain() {
         this.active = false;
@@ -31,7 +35,7 @@ public class Grain {
      */
     public void activate(double playbackRate, double amplitude, int maxLifetime,
                           double[] bellDry, double[] bellWet,
-                          boolean useReverb, double reverbMix) {
+                          boolean useReverb, double reverbMix, boolean reverse) {
         this.position = 0;
         this.playbackRate = playbackRate;
         this.amplitude = amplitude;
@@ -41,7 +45,13 @@ public class Grain {
         this.bellWet = bellWet;
         this.useReverb = useReverb;
         this.reverbMix = reverbMix;
-        this.bellLength = useReverb ? bellWet.length : bellDry.length;
+        this.reverse = reverse;
+        this.bellLength = useReverb ? Math.min(bellDry.length, bellWet.length) : bellDry.length;
+        // Reverse grains: start offset so they always reach the attack at the end
+        if (reverse) {
+            double traversable = playbackRate * maxLifetime;
+            this.position = Math.max(0, bellLength - traversable);
+        }
         this.active = true;
     }
 
@@ -62,11 +72,23 @@ public class Grain {
 
             double frac = position - idx;
 
-            // Fade-out envelope near end of grain lifetime
+            // Fade envelope
             double env = 1.0;
-            int remaining = maxLifetime - age;
-            if (remaining < FADE_SAMPLES) {
-                env = remaining / (double) FADE_SAMPLES;
+            if (reverse) {
+                // Reverse: long fade-IN at start (swell-up) + fade-OUT at end (no clicks)
+                if (age < REVERSE_FADE_IN_SAMPLES) {
+                    env = age / (double) REVERSE_FADE_IN_SAMPLES;
+                }
+                int remaining = maxLifetime - age;
+                if (remaining < REVERSE_FADE_OUT_SAMPLES) {
+                    env *= remaining / (double) REVERSE_FADE_OUT_SAMPLES;
+                }
+            } else {
+                // Forward: fade-OUT at end only
+                int remaining = maxLifetime - age;
+                if (remaining < FADE_SAMPLES) {
+                    env = remaining / (double) FADE_SAMPLES;
+                }
             }
 
             double sample;

@@ -15,9 +15,15 @@ public class MidiInputHandler implements Receiver {
     private final Voice[] voices;
     private final ControlState controls;
 
+    // Soft pickup: prevents CC knob jumps on absolute encoders
+    private final int[] lastHwCc = new int[128];
+    private final boolean[] ccPickedUp = new boolean[128];
+
     public MidiInputHandler(Voice[] voices, ControlState controls) {
         this.voices = voices;
         this.controls = controls;
+        java.util.Arrays.fill(lastHwCc, -1);
+        java.util.Arrays.fill(ccPickedUp, false);
     }
 
     @Override
@@ -86,16 +92,61 @@ public class MidiInputHandler implements Receiver {
         }
     }
 
+    /**
+     * Soft pickup: only apply a CC value when the physical knob has "caught"
+     * the current software value. Prevents jumps with absolute-position encoders.
+     */
+    private boolean shouldPickUp(int cc, int value) {
+        double softwareValue;
+        switch (cc) {
+            case 1: softwareValue = controls.getMix(); break;
+            case 76: softwareValue = controls.getPan(); break;
+            case 71: softwareValue = controls.getDensity(); break;
+            case 74: softwareValue = controls.getVolume(); break;
+            case 77: softwareValue = controls.getReverseAmount(); break;
+            default: return true; // unmapped CCs don't need pickup
+        }
+        int swVal = (int) (softwareValue * 127);
+        int prev = lastHwCc[cc];
+        lastHwCc[cc] = value;
+
+        if (ccPickedUp[cc]) return true;
+
+        if (prev < 0) {
+            // First message for this CC — pick up if close enough
+            if (Math.abs(value - swVal) <= 5) {
+                ccPickedUp[cc] = true;
+                return true;
+            }
+            return false;
+        }
+
+        // Check if knob swept past the software value
+        if ((prev <= swVal && value >= swVal) || (prev >= swVal && value <= swVal)) {
+            ccPickedUp[cc] = true;
+            return true;
+        }
+        return false;
+    }
+
     private void handleCC(int cc, int value) {
+        if (!shouldPickUp(cc, value)) return;
+
         switch (cc) {
             case 1: // Mod wheel -> mix
                 controls.setMix(value / 127.0);
                 break;
-            case 10: // Pan -> stereo position
+            case 76: // Pan
                 controls.setPan(value / 127.0);
                 break;
-            case 74: // Brightness -> density
+            case 71: // Density
                 controls.setDensity(value / 127.0);
+                break;
+            case 74: // Volume
+                controls.setVolume(value / 127.0);
+                break;
+            case 77: // Reverse
+                controls.setReverseAmount(value / 127.0);
                 break;
         }
     }
@@ -105,30 +156,51 @@ public class MidiInputHandler implements Receiver {
         // Nothing to clean up
     }
 
-    /**
-     * Lists available MIDI input devices and opens the first one found.
-     * Returns null if no MIDI input devices are available.
-     */
-    public static MidiDevice findAndOpenDevice() {
+    /** Returns all available MIDI input devices (devices with transmitters). */
+    public static java.util.List<MidiDevice.Info> listInputDevices() {
+        java.util.List<MidiDevice.Info> inputs = new java.util.ArrayList<>();
         MidiDevice.Info[] infos = MidiSystem.getMidiDeviceInfo();
         System.out.println("Available MIDI devices:");
 
         for (MidiDevice.Info info : infos) {
-            System.out.println("  - " + info.getName() + " (" + info.getDescription() + ")");
             try {
                 MidiDevice device = MidiSystem.getMidiDevice(info);
-                // We need a device that has transmitters (i.e., can send MIDI to us)
-                if (device.getMaxTransmitters() != 0) {
-                    device.open();
-                    System.out.println("  -> Opened as MIDI input: " + info.getName());
-                    return device;
+                boolean hasTransmitters = device.getMaxTransmitters() != 0;
+                String marker = hasTransmitters ? " [INPUT]" : "";
+                System.out.println("  - " + info.getName() + " (" + info.getDescription() + ")" + marker);
+                if (hasTransmitters) {
+                    inputs.add(info);
                 }
             } catch (MidiUnavailableException e) {
-                // Skip this device
+                System.out.println("  - " + info.getName() + " (UNAVAILABLE)");
             }
         }
 
-        System.out.println("No MIDI input devices found.");
+        if (inputs.isEmpty()) {
+            System.out.println("No MIDI input devices found.");
+        }
+        return inputs;
+    }
+
+    /** Opens a specific MIDI device. Returns null on failure. */
+    public static MidiDevice openDevice(MidiDevice.Info info) {
+        try {
+            MidiDevice device = MidiSystem.getMidiDevice(info);
+            device.open();
+            System.out.println("Opened MIDI input: " + info.getName());
+            return device;
+        } catch (MidiUnavailableException e) {
+            System.err.println("Failed to open MIDI device " + info.getName() + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    /** Auto-detect: lists devices and opens the first one found. */
+    public static MidiDevice findAndOpenDevice() {
+        java.util.List<MidiDevice.Info> inputs = listInputDevices();
+        if (!inputs.isEmpty()) {
+            return openDevice(inputs.get(0));
+        }
         return null;
     }
 }

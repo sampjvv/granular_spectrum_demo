@@ -24,6 +24,7 @@ public class LiveMidiController {
 
     private volatile boolean running;
     private volatile boolean starting;
+    private MidiDevice.Info selectedMidiDevice;
 
     public void start(SynthParameters params, Consumer<Integer> progress) {
         if (running || starting) return;
@@ -67,10 +68,15 @@ public class LiveMidiController {
                 voices[i] = new Voice();
                 voices[i].setGrainSchedule(schedule,
                         params.dramaticFactor, params.dramaticEnvShape);
+                voices[i].setControls(controlState);
             }
 
             // 5. Set up MIDI input
-            midiDevice = MidiInputHandler.findAndOpenDevice();
+            if (selectedMidiDevice != null) {
+                midiDevice = MidiInputHandler.openDevice(selectedMidiDevice);
+            } else {
+                midiDevice = MidiInputHandler.findAndOpenDevice();
+            }
             if (midiDevice != null) {
                 try {
                     Transmitter transmitter = midiDevice.getTransmitter();
@@ -148,5 +154,9 @@ public class LiveMidiController {
 
     public int getMaxVoices() {
         return MAX_VOICES;
+    }
+
+    public void setSelectedMidiDevice(MidiDevice.Info info) {
+        this.selectedMidiDevice = info;
     }
 }

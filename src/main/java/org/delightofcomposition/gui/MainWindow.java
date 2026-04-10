@@ -97,6 +97,8 @@ public class MainWindow extends JFrame {
     private JButton liveStopBtn;
     private JLabel midiStatusLabel;
     private JLabel voiceCountLabel;
+    private javax.swing.JComboBox<String> midiDeviceCombo;
+    private java.util.List<javax.sound.midi.MidiDevice.Info> midiDeviceInfos = new java.util.ArrayList<>();
     private JProgressBar liveProgressBar;
     private Timer liveStatusTimer;
 
@@ -443,6 +445,21 @@ public class MainWindow extends JFrame {
         JPanel liveToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         liveToolbar.setOpaque(false);
 
+        // MIDI device selector
+        midiDeviceCombo = new javax.swing.JComboBox<>();
+        midiDeviceCombo.setPreferredSize(new Dimension(180, 34));
+        midiDeviceCombo.setMaximumSize(new Dimension(180, 34));
+        Theme.styleComboBox(midiDeviceCombo);
+        midiDeviceCombo.setToolTipText("Select MIDI input device");
+        refreshMidiDeviceList();
+        liveToolbar.add(midiDeviceCombo);
+
+        JButton midiRefreshBtn = Theme.iconRefreshButton();
+        midiRefreshBtn.setPreferredSize(new Dimension(28, 28));
+        midiRefreshBtn.setToolTipText("Refresh MIDI device list");
+        midiRefreshBtn.addActionListener(e -> refreshMidiDeviceList());
+        liveToolbar.add(midiRefreshBtn);
+
         liveStartBtn = Theme.primaryButton("Start");
         liveStartBtn.setPreferredSize(new Dimension(80, 34));
         liveStartBtn.setToolTipText("Start live MIDI playback");
@@ -684,6 +701,18 @@ public class MainWindow extends JFrame {
         contentCards.repaint();
     }
 
+    private void refreshMidiDeviceList() {
+        midiDeviceInfos = org.delightofcomposition.midi.MidiInputHandler.listInputDevices();
+        midiDeviceCombo.removeAllItems();
+        midiDeviceCombo.addItem("Auto-detect");
+        for (javax.sound.midi.MidiDevice.Info info : midiDeviceInfos) {
+            midiDeviceCombo.addItem(info.getName());
+        }
+        if (!midiDeviceInfos.isEmpty()) {
+            midiDeviceCombo.setSelectedIndex(1); // select first real device
+        }
+    }
+
     private void startLiveMode() {
         // Validate samples
         if (params.sourceFile == null || !params.sourceFile.exists()) {
@@ -704,6 +733,14 @@ public class MainWindow extends JFrame {
         midiStatusLabel.setText("Preparing layers...");
         liveProgressBar.setValue(0);
         liveProgressBar.setVisible(true);
+
+        // Set selected MIDI device
+        int selectedIdx = midiDeviceCombo.getSelectedIndex();
+        if (selectedIdx > 0 && selectedIdx - 1 < midiDeviceInfos.size()) {
+            liveController.setSelectedMidiDevice(midiDeviceInfos.get(selectedIdx - 1));
+        } else {
+            liveController.setSelectedMidiDevice(null);
+        }
 
         new SwingWorker<Void, Integer>() {
             @Override

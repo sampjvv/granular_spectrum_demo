@@ -39,6 +39,8 @@ public class GrainSchedule {
     private final GrainEvent[] events;      // sorted by time
     private final double[] bellDry;          // bell sample (normalized)
     private final double[] bellWet;          // bell with reverb (may be longer)
+    private final double[] bellDryReverse;   // bell reversed for reverse grain mode
+    private final double[] bellWetReverse;   // wet bell reversed
     private final double bellOrigFreq;       // reference frequency of bell sample
     private final double sourceFundamental;  // detected fundamental of source
     private final double[] sourceSample;     // source for mix control
@@ -53,12 +55,35 @@ public class GrainSchedule {
         this.events = events;
         this.bellDry = bellDry;
         this.bellWet = bellWet;
+        this.bellDryReverse = trimSilence(reverseArray(bellDry));
+        this.bellWetReverse = bellWet != null ? trimSilence(reverseArray(bellWet)) : null;
         this.bellOrigFreq = bellOrigFreq;
         this.sourceFundamental = sourceFundamental;
         this.sourceSample = sourceSample;
         this.sourceDurationSec = sourceDurationSec;
         this.reverbMix = reverbMix;
         this.useReverb = useReverb;
+    }
+
+    private static double[] reverseArray(double[] src) {
+        double[] rev = new double[src.length];
+        for (int i = 0; i < src.length; i++) {
+            rev[i] = src[src.length - 1 - i];
+        }
+        return rev;
+    }
+
+    private static double[] trimSilence(double[] samples) {
+        double threshold = 0.005;
+        int start = 0;
+        for (int i = 0; i < samples.length; i++) {
+            if (Math.abs(samples[i]) > threshold) {
+                start = i;
+                break;
+            }
+        }
+        if (start == 0) return samples;
+        return java.util.Arrays.copyOfRange(samples, start, samples.length);
     }
 
     /**
@@ -160,6 +185,8 @@ public class GrainSchedule {
     public GrainEvent[] getEvents() { return events; }
     public double[] getBellDry() { return bellDry; }
     public double[] getBellWet() { return bellWet; }
+    public double[] getBellDryReverse() { return bellDryReverse; }
+    public double[] getBellWetReverse() { return bellWetReverse; }
     public double getBellOrigFreq() { return bellOrigFreq; }
     public double getSourceFundamental() { return sourceFundamental; }
     public double[] getSourceSample() { return sourceSample; }

@@ -66,10 +66,11 @@ public class AudioEngine implements Runnable {
                     }
                 }
 
-                // Soft clip and convert to interleaved 16-bit stereo PCM
+                // Apply master volume, soft clip, convert to interleaved 16-bit stereo PCM
+                double vol = controls.getVolume();
                 for (int i = 0; i < BUFFER_SIZE; i++) {
-                    double sampleL = Math.max(-1.0, Math.min(1.0, mixBufferL[i]));
-                    double sampleR = Math.max(-1.0, Math.min(1.0, mixBufferR[i]));
+                    double sampleL = Math.max(-1.0, Math.min(1.0, mixBufferL[i] * vol));
+                    double sampleR = Math.max(-1.0, Math.min(1.0, mixBufferR[i] * vol));
 
                     int pcmL = (int) (sampleL * Short.MAX_VALUE);
                     int pcmR = (int) (sampleR * Short.MAX_VALUE);

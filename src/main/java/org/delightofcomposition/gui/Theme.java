@@ -4,12 +4,14 @@ import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.GradientPaint;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Insets;
+import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.geom.RoundRectangle2D;
 
@@ -778,6 +780,146 @@ public class Theme {
         tagFont(btn, "base");
         tagFg(btn, "fg");
         return btn;
+    }
+
+    /**
+     * Create a ghost-style button that paints a circular refresh arrow icon
+     * using Graphics2D primitives. No font dependency — works everywhere.
+     */
+    /** Symbol font with good Unicode arrow/icon coverage on Windows. */
+    private static final Font FONT_SYMBOL = new Font("Segoe UI Symbol", Font.PLAIN, 16);
+
+    public static JButton iconRefreshButton() {
+        JButton btn = new JButton("\u21BB") {
+            @Override
+            public Dimension getMinimumSize() { return new Dimension(28, 28); }
+            @Override
+            public Dimension getPreferredSize() { return new Dimension(28, 28); }
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+                if (getModel().isRollover() || getModel().isPressed()) {
+                    Color hoverBg = getModel().isPressed() ? ZINC_700 : BG_MUTED;
+                    g2.setColor(hoverBg);
+                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), RADIUS, RADIUS);
+                }
+
+                g2.setColor(isEnabled() ? getForeground() : ZINC_600);
+                g2.setFont(FONT_SYMBOL);
+                FontMetrics fm = g2.getFontMetrics();
+                int tx = (getWidth() - fm.stringWidth(getText())) / 2;
+                int ty = (getHeight() + fm.getAscent() - fm.getDescent()) / 2 - 1;
+                g2.drawString(getText(), tx, ty);
+
+                g2.dispose();
+            }
+        };
+        btn.setContentAreaFilled(false);
+        btn.setBorderPainted(false);
+        btn.setFocusPainted(false);
+        tagFg(btn, "fg");
+        return btn;
+    }
+
+    /**
+     * Apply consistent theme styling to a JComboBox:
+     * - Themed background, foreground, font, border
+     * - Custom cell renderer for popup items (theme colors, padding)
+     * - Custom BasicComboBoxUI with a clean chevron arrow button
+     */
+    public static void styleComboBox(javax.swing.JComboBox<?> combo) {
+        combo.setBackground(BG_INPUT);
+        combo.setForeground(FG);
+        combo.setFont(FONT_BASE);
+        combo.setOpaque(false);
+        combo.setFocusable(false); // suppress blue focus ring from Swing L&F
+        combo.setBorder(BorderFactory.createEmptyBorder());
+
+        // Popup list cell renderer
+        combo.setRenderer(new javax.swing.DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(javax.swing.JList<?> list, Object value,
+                    int index, boolean isSelected, boolean cellHasFocus) {
+                JLabel label = (JLabel) super.getListCellRendererComponent(
+                        list, value, index, isSelected, cellHasFocus);
+                label.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
+                label.setFont(FONT_BASE);
+                label.setBackground(isSelected ? ACCENT : BG_CARD);
+                label.setForeground(isSelected ? FG : FG);
+                label.setOpaque(true);
+                return label;
+            }
+        });
+
+        // Custom UI: paint the entire combo with theme colors, no focus ring
+        combo.setUI(new javax.swing.plaf.basic.BasicComboBoxUI() {
+            @Override
+            public void paint(Graphics g, javax.swing.JComponent c) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                int w = c.getWidth(), h = c.getHeight();
+                // Rounded background
+                g2.setColor(BG_INPUT);
+                g2.fillRoundRect(0, 0, w - 1, h - 1, RADIUS_SM, RADIUS_SM);
+                // Rounded border
+                g2.setColor(BORDER);
+                g2.setStroke(new BasicStroke(1f));
+                g2.drawRoundRect(0, 0, w - 1, h - 1, RADIUS_SM, RADIUS_SM);
+
+                // Display selected value as text
+                Object value = comboBox.getSelectedItem();
+                String text = value == null ? "" : value.toString();
+                g2.setColor(FG);
+                g2.setFont(FONT_BASE);
+                FontMetrics fm = g2.getFontMetrics();
+                int tx = 10;
+                int ty = (h + fm.getAscent() - fm.getDescent()) / 2;
+                // Clip text to fit before the arrow button
+                int maxTextWidth = w - 28;
+                String drawn = text;
+                if (fm.stringWidth(drawn) > maxTextWidth) {
+                    while (drawn.length() > 1 && fm.stringWidth(drawn + "…") > maxTextWidth) {
+                        drawn = drawn.substring(0, drawn.length() - 1);
+                    }
+                    drawn = drawn + "…";
+                }
+                g2.drawString(drawn, tx, ty);
+
+                // Chevron on the right
+                int cx = w - 14;
+                int cy = h / 2;
+                g2.setColor(FG_DIM);
+                g2.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                g2.drawLine(cx - 4, cy - 2, cx, cy + 2);
+                g2.drawLine(cx, cy + 2, cx + 4, cy - 2);
+
+                g2.dispose();
+            }
+
+            @Override
+            public void paintCurrentValue(Graphics g, Rectangle bounds, boolean hasFocus) {
+                // We paint everything in paint() above — skip default text rendering
+            }
+
+            @Override
+            public void paintCurrentValueBackground(Graphics g, Rectangle bounds, boolean hasFocus) {
+                // We paint everything in paint() above — skip default bg rendering
+            }
+
+            @Override
+            protected JButton createArrowButton() {
+                // Invisible button — we paint the chevron ourselves
+                JButton btn = new JButton();
+                btn.setBorder(BorderFactory.createEmptyBorder());
+                btn.setContentAreaFilled(false);
+                btn.setFocusPainted(false);
+                btn.setVisible(false);
+                return btn;
+            }
+        });
     }
 
     /**

@@ -25,12 +25,12 @@ public class GrainPool {
      */
     public boolean spawn(double playbackRate, double amplitude, int maxLifetime,
                           double[] bellDry, double[] bellWet,
-                          boolean useReverb, double reverbMix) {
+                          boolean useReverb, double reverbMix, boolean reverse) {
         for (int j = 0; j < maxGrains; j++) {
             int i = (nextFree + j) % maxGrains;
             if (!grains[i].isActive()) {
                 grains[i].activate(playbackRate, amplitude, maxLifetime,
-                        bellDry, bellWet, useReverb, reverbMix);
+                        bellDry, bellWet, useReverb, reverbMix, reverse);
                 nextFree = (i + 1) % maxGrains;
                 return true;
             }

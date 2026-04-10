@@ -45,10 +45,15 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
     private LabeledSlider synthReverbSlider;
 
     // Live controls
+    private LabeledSlider volumeSlider;
     private LabeledSlider densitySlider;
     private LabeledSlider mixSlider;
     private LabeledSlider panSlider;
     private LabeledSlider dramaticSlider;
+    private LabeledSlider reverseSlider;
+    private ToggleSwitch sourceLoopToggle;
+    private LabeledSlider loopStartSlider;
+    private LabeledSlider loopEndSlider;
 
     private LiveMidiController liveController;
     private Timer syncTimer;
@@ -96,13 +101,23 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
                 "How much reverb to apply to the original source audio portion of the mix.");
         help.register(synthReverbSlider,
                 "How much reverb to apply to the granular synthesized portion of the mix.");
+        help.register(volumeSlider,
+                "Master output volume. Also controllable via MIDI CC#74.");
         help.register(densitySlider,
-                "Controls how many granular layers are audible. Use the up/down arrow keys or MIDI CC#74 as shortcuts.");
+                "Controls how many granular layers are audible. MIDI CC#71.");
         help.register(mixSlider,
                 "Blends between the granular texture (0%) and the original source sample (100%). "
                 + "Use the left/right arrow keys or MIDI mod wheel as shortcuts.");
         help.register(panSlider,
                 "Stereo position of the output. Left = 0%, Center = 50%, Right = 100%. Also controllable via MIDI CC#10.");
+        help.register(reverseSlider,
+                "Probability of grains being rendered reversed (swell-up attack). 0% = all forward, 100% = all reversed.");
+        help.register(sourceLoopToggle,
+                "When enabled, the source sample loops with a crossfade when a note is held past its duration.");
+        help.register(loopStartSlider,
+                "How far into the source to start the loop region (trims the beginning).");
+        help.register(loopEndSlider,
+                "Where in the source the loop region ends (trims the end).");
         help.register(dramaticSlider,
                 "Exaggerates amplitude dynamics across the playback position. Higher = more contrast and drama.");
     }
@@ -241,6 +256,17 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
         card.add(Theme.sectionHeader("Live Controls"));
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
 
+        volumeSlider = new LabeledSlider("Volume", 0, 100, 80, v -> v + "%");
+        volumeSlider.setAlignmentX(0);
+        volumeSlider.addChangeListener(e -> {
+            if (syncing) return;
+            if (liveController != null && liveController.getControlState() != null) {
+                liveController.getControlState().setVolume(volumeSlider.getValue() / 100.0);
+            }
+        });
+        card.add(volumeSlider);
+        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+
         densitySlider = new LabeledSlider("Density", 0, 100, 50, v -> v + "%");
         densitySlider.setAlignmentX(0);
         densitySlider.addChangeListener(e -> {
@@ -273,6 +299,53 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
             }
         });
         card.add(panSlider);
+        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+
+        // Reverse grains
+        reverseSlider = new LabeledSlider("Reverse", 0, 100, 0, v -> v + "%");
+        reverseSlider.setAlignmentX(0);
+        reverseSlider.addChangeListener(e -> {
+            if (syncing) return;
+            if (liveController != null && liveController.getControlState() != null) {
+                liveController.getControlState().setReverseAmount(reverseSlider.getValue() / 100.0);
+            }
+        });
+        card.add(reverseSlider);
+        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+
+        // Source looping
+        sourceLoopToggle = new ToggleSwitch(false);
+        sourceLoopToggle.addChangeListener(e -> {
+            if (syncing) return;
+            if (liveController != null && liveController.getControlState() != null) {
+                liveController.getControlState().setSourceLoop(sourceLoopToggle.isSelected());
+            }
+        });
+        JPanel loopRow = Theme.toggleRow("Loop Source Audio", sourceLoopToggle);
+        loopRow.setAlignmentX(0);
+        card.add(loopRow);
+        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+
+        loopStartSlider = new LabeledSlider("Loop Start", 0, 50, 10, v -> v + "%");
+        loopStartSlider.setAlignmentX(0);
+        loopStartSlider.addChangeListener(e -> {
+            if (syncing) return;
+            if (liveController != null && liveController.getControlState() != null) {
+                liveController.getControlState().setSourceLoopStart(loopStartSlider.getValue() / 100.0);
+            }
+        });
+        card.add(loopStartSlider);
+        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+
+        loopEndSlider = new LabeledSlider("Loop End", 50, 100, 90, v -> v + "%");
+        loopEndSlider.setAlignmentX(0);
+        loopEndSlider.addChangeListener(e -> {
+            if (syncing) return;
+            if (liveController != null && liveController.getControlState() != null) {
+                liveController.getControlState().setSourceLoopEnd(loopEndSlider.getValue() / 100.0);
+            }
+        });
+        card.add(loopEndSlider);
 
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
         return card;
@@ -292,9 +365,14 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
             int densityVal = (int) (cs.getDensity() * 100);
             int mixVal = (int) (cs.getMix() * 100);
             int panVal = (int) (cs.getPan() * 100);
+            int volVal = (int) (cs.getVolume() * 100);
+            int revVal = (int) (cs.getReverseAmount() * 100);
 
             syncing = true;
             try {
+                if (volumeSlider.getValue() != volVal) {
+                    volumeSlider.setValue(volVal);
+                }
                 if (densitySlider.getValue() != densityVal) {
                     densitySlider.setValue(densityVal);
                 }
@@ -303,6 +381,9 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
                 }
                 if (panSlider.getValue() != panVal) {
                     panSlider.setValue(panVal);
+                }
+                if (reverseSlider != null && reverseSlider.getValue() != revVal) {
+                    reverseSlider.setValue(revVal);
                 }
             } finally {
                 syncing = false;
