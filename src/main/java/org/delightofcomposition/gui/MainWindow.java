@@ -101,6 +101,8 @@ public class MainWindow extends JFrame {
     private java.util.List<javax.sound.midi.MidiDevice.Info> midiDeviceInfos = new java.util.ArrayList<>();
     private JProgressBar liveProgressBar;
     private Timer liveStatusTimer;
+    private JButton liveRecordBtn;
+    private Timer recordFlashTimer;
 
     public MainWindow() {
         super("Granular Spectrum Synthesizer");
@@ -473,6 +475,14 @@ public class MainWindow extends JFrame {
         liveStopBtn.addActionListener(e -> stopLiveMode());
         liveToolbar.add(liveStopBtn);
 
+        liveRecordBtn = Theme.ghostButton("\u25CF");
+        liveRecordBtn.setPreferredSize(new Dimension(34, 34));
+        liveRecordBtn.setForeground(new java.awt.Color(200, 40, 40));
+        liveRecordBtn.setToolTipText("Record live performance to WAV");
+        liveRecordBtn.setEnabled(false);
+        liveRecordBtn.addActionListener(e -> toggleRecording());
+        liveToolbar.add(liveRecordBtn);
+
         liveSavePresetBtn = Theme.secondaryButton("Save to Library");
         liveSavePresetBtn.setPreferredSize(new Dimension(130, 34));
         liveSavePresetBtn.setToolTipText("Save current settings as a live preset");
@@ -764,6 +774,9 @@ public class MainWindow extends JFrame {
                     liveStopBtn.setEnabled(true);
                     midiStatusLabel.setText("MIDI: " + liveController.getMidiDeviceName());
 
+                    // Enable recording
+                    liveRecordBtn.setEnabled(true);
+
                     // Wire up panels
                     liveParamPanel.setLiveController(liveController);
                     liveMonitorPanel.setLiveController(liveController);
@@ -793,6 +806,14 @@ public class MainWindow extends JFrame {
     }
 
     private void stopLiveMode() {
+        // Auto-stop recording if active
+        org.delightofcomposition.realtime.LiveRecorder rec = liveController.getRecorder();
+        if (rec != null && rec.isRecording()) {
+            stopRecordingAndSave(rec);
+        }
+        stopRecordFlash();
+        liveRecordBtn.setEnabled(false);
+
         if (liveStatusTimer != null) {
             liveStatusTimer.stop();
             liveStatusTimer = null;
@@ -811,6 +832,65 @@ public class MainWindow extends JFrame {
         midiStatusLabel.setText("MIDI: —");
         voiceCountLabel.setText("");
         liveMonitorPanel.reset();
+    }
+
+    private void toggleRecording() {
+        org.delightofcomposition.realtime.LiveRecorder rec = liveController.getRecorder();
+        if (rec == null) return;
+
+        if (rec.isRecording()) {
+            stopRecordFlash();
+            stopRecordingAndSave(rec);
+        } else {
+            rec.startRecording();
+            startRecordFlash();
+            midiStatusLabel.setText("Recording...");
+        }
+    }
+
+    private void stopRecordingAndSave(org.delightofcomposition.realtime.LiveRecorder rec) {
+        java.io.File outputDir = new java.io.File("../samples/granular-recordings");
+        new SwingWorker<java.io.File, Void>() {
+            @Override
+            protected java.io.File doInBackground() {
+                return rec.stopAndSave(outputDir);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    java.io.File saved = get();
+                    if (saved != null) {
+                        midiStatusLabel.setText("Saved " + saved.getName());
+                    } else {
+                        midiStatusLabel.setText("Nothing recorded");
+                    }
+                } catch (Exception ex) {
+                    midiStatusLabel.setText("Save failed");
+                }
+            }
+        }.execute();
+    }
+
+    private void startRecordFlash() {
+        java.awt.Color recordRed = new java.awt.Color(200, 40, 40);
+        recordFlashTimer = new Timer(500, e -> {
+            if (liveRecordBtn.getForeground().equals(recordRed)) {
+                liveRecordBtn.setForeground(Theme.BG);
+            } else {
+                liveRecordBtn.setForeground(recordRed);
+            }
+        });
+        liveRecordBtn.setForeground(recordRed);
+        recordFlashTimer.start();
+    }
+
+    private void stopRecordFlash() {
+        if (recordFlashTimer != null) {
+            recordFlashTimer.stop();
+            recordFlashTimer = null;
+        }
+        liveRecordBtn.setForeground(new java.awt.Color(200, 40, 40));
     }
 
     private void setupKeyboardShortcuts() {

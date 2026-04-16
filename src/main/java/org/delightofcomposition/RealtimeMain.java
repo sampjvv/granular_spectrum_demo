@@ -85,8 +85,8 @@ public class RealtimeMain {
 
     public static void main(String[] args) throws Exception {
         AudioEngine engine = start(
-                "resources/bowedCello1.wav",
-                "resources/bell.wav",
+                "../samples/Cello/bowedCello1.wav",
+                "../samples/bell.wav",
                 1287);
 
         if (engine == null) {

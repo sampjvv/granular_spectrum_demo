@@ -17,6 +17,7 @@ public class AudioEngine implements Runnable {
     private final Voice[] voices;
     private final ControlState controls;
     private volatile boolean running;
+    private LiveRecorder recorder;
 
     // Pre-allocated buffers to avoid GC in audio thread
     private final double[] mixBufferL;
@@ -80,6 +81,10 @@ public class AudioEngine implements Runnable {
                     byteBuffer[i * 4 + 3] = (byte) ((pcmR >> 8) & 0xFF);
                 }
 
+                if (recorder != null) {
+                    recorder.write(mixBufferL, mixBufferR, BUFFER_SIZE);
+                }
+
                 line.write(byteBuffer, 0, byteBuffer.length);
             }
 
@@ -95,6 +100,14 @@ public class AudioEngine implements Runnable {
 
     public void stop() {
         running = false;
+    }
+
+    public void setRecorder(LiveRecorder recorder) {
+        this.recorder = recorder;
+    }
+
+    public LiveRecorder getRecorder() {
+        return recorder;
     }
 
     public boolean isRunning() {

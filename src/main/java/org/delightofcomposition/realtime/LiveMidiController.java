@@ -21,6 +21,7 @@ public class LiveMidiController {
     private Voice[] voices;
     private SpectralAnalysis analysis;
     private Thread audioThread;
+    private LiveRecorder recorder;
 
     private volatile boolean running;
     private volatile boolean starting;
@@ -87,8 +88,10 @@ public class LiveMidiController {
                 }
             }
 
-            // 6. Start audio engine on high-priority thread
+            // 6. Set up recorder and start audio engine on high-priority thread
+            recorder = new LiveRecorder();
             engine = new AudioEngine(voices, controlState);
+            engine.setRecorder(recorder);
             audioThread = new Thread(engine, "LiveAudioEngine");
             audioThread.setDaemon(true);
             audioThread.setPriority(Thread.MAX_PRIORITY);
@@ -154,6 +157,10 @@ public class LiveMidiController {
 
     public int getMaxVoices() {
         return MAX_VOICES;
+    }
+
+    public LiveRecorder getRecorder() {
+        return recorder;
     }
 
     public void setSelectedMidiDevice(MidiDevice.Info info) {

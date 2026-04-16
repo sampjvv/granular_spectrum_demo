@@ -15,11 +15,11 @@ public class SimpleSynth extends Synth {
     double[] sample;
 
     public SimpleSynth() {
-        initialize("resources/4.wav", 394, true, 0.3, "resources/cathedral.wav");
+        initialize("resources/4.wav", 394, true, 0.3, "../samples/cathedral.wav");
     }
 
     public SimpleSynth(String samplePath, double freq) {
-        initialize(samplePath, freq, true, 0.3, "resources/cathedral.wav");
+        initialize(samplePath, freq, true, 0.3, "../samples/cathedral.wav");
     }
 
     public SimpleSynth(String samplePath, double freq, boolean useReverb, double reverbMix, String irPath) {

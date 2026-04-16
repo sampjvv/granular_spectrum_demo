@@ -15,15 +15,13 @@ public class MidiInputHandler implements Receiver {
     private final Voice[] voices;
     private final ControlState controls;
 
-    // Soft pickup: prevents CC knob jumps on absolute encoders
-    private final int[] lastHwCc = new int[128];
-    private final boolean[] ccPickedUp = new boolean[128];
+    // Incremental soft pickup: absorbs first touch, then tracks deltas
+    private final int[] lastHw = new int[128]; // previous hardware value (-1 = unseen)
 
     public MidiInputHandler(Voice[] voices, ControlState controls) {
         this.voices = voices;
         this.controls = controls;
-        java.util.Arrays.fill(lastHwCc, -1);
-        java.util.Arrays.fill(ccPickedUp, false);
+        java.util.Arrays.fill(lastHw, -1);
     }
 
     @Override
@@ -92,63 +90,47 @@ public class MidiInputHandler implements Receiver {
         }
     }
 
-    /**
-     * Soft pickup: only apply a CC value when the physical knob has "caught"
-     * the current software value. Prevents jumps with absolute-position encoders.
-     */
-    private boolean shouldPickUp(int cc, int value) {
-        double softwareValue;
+    private double getSoftwareValue(int cc) {
         switch (cc) {
-            case 1: softwareValue = controls.getMix(); break;
-            case 76: softwareValue = controls.getPan(); break;
-            case 71: softwareValue = controls.getDensity(); break;
-            case 74: softwareValue = controls.getVolume(); break;
-            case 77: softwareValue = controls.getReverseAmount(); break;
-            default: return true; // unmapped CCs don't need pickup
+            case 74: return controls.getVolume();
+            case 71: return controls.getDensity();
+            case 76: return controls.getPan();
+            case 77: return controls.getReverseAmount();
+            default: return 0.0;
         }
-        int swVal = (int) (softwareValue * 127);
-        int prev = lastHwCc[cc];
-        lastHwCc[cc] = value;
-
-        if (ccPickedUp[cc]) return true;
-
-        if (prev < 0) {
-            // First message for this CC — pick up if close enough
-            if (Math.abs(value - swVal) <= 5) {
-                ccPickedUp[cc] = true;
-                return true;
-            }
-            return false;
-        }
-
-        // Check if knob swept past the software value
-        if ((prev <= swVal && value >= swVal) || (prev >= swVal && value <= swVal)) {
-            ccPickedUp[cc] = true;
-            return true;
-        }
-        return false;
     }
 
-    private void handleCC(int cc, int value) {
-        if (!shouldPickUp(cc, value)) return;
-
+    private void setSoftwareValue(int cc, double val) {
+        val = Math.max(0.0, Math.min(1.0, val));
         switch (cc) {
-            case 1: // Mod wheel -> mix
-                controls.setMix(value / 127.0);
-                break;
-            case 76: // Pan
-                controls.setPan(value / 127.0);
-                break;
-            case 71: // Density
-                controls.setDensity(value / 127.0);
-                break;
-            case 74: // Volume
-                controls.setVolume(value / 127.0);
-                break;
-            case 77: // Reverse
-                controls.setReverseAmount(value / 127.0);
-                break;
+            case 74: controls.setVolume(val); break;
+            case 71: controls.setDensity(val); break;
+            case 76: controls.setPan(val); break;
+            case 77: controls.setReverseAmount(val); break;
         }
+    }
+
+    private synchronized void handleCC(int cc, int value) {
+        // Mod wheel: spring-loaded, always apply directly
+        if (cc == 1) {
+            controls.setMix(value / 127.0);
+            return;
+        }
+
+        // Only process mapped CCs
+        if (cc != 74 && cc != 71 && cc != 76 && cc != 77) return;
+
+        // Incremental soft pickup
+        if (lastHw[cc] == -1) {
+            // First touch: record position, don't apply (prevents jump)
+            lastHw[cc] = value;
+            return;
+        }
+
+        // Apply delta between consecutive messages
+        double delta = (value - lastHw[cc]) / 127.0;
+        lastHw[cc] = value;
+        setSoftwareValue(cc, getSoftwareValue(cc) + delta);
     }
 
     @Override

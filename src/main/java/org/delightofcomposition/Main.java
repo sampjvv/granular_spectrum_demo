@@ -5,7 +5,7 @@ import org.delightofcomposition.sound.WaveWriter;
 
 public class Main {
     public static void main(String[] args) {
-        double[] sample = ReadSound.readSoundDoubles("resources/bowedCello1.wav");
+        double[] sample = ReadSound.readSoundDoubles("../samples/Cello/bowedCello1.wav");
         int origlen = sample.length;
         double panSmoothing = 0.5;
         WaveWriter ww = new WaveWriter("experiment1_basic_spectrum");

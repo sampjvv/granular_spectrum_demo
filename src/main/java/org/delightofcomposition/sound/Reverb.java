@@ -4,7 +4,7 @@ import java.util.Arrays;
 
 public class Reverb {
     public static double[] generateWet(double[] sample) {
-        return generateWet(sample, "resources/cathedral.wav");
+        return generateWet(sample, "../samples/cathedral.wav");
     }
 
     public static double[] generateWet(double[] sample, String irPath) {

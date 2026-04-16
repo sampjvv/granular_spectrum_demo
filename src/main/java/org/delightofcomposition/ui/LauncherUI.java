@@ -90,8 +90,8 @@ public class LauncherUI {
         System.out.println("Launching Real-Time MIDI Mode...");
         new Thread(() -> {
             activeEngine = RealtimeMain.start(
-                    "resources/bowedCello1.wav",
-                    "resources/bell.wav",
+                    "../samples/Cello/bowedCello1.wav",
+                    "../samples/bell.wav",
                     1287);
         }, "MidiLauncher").start();
     }

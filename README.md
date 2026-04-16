@@ -22,6 +22,16 @@ Renders the full granular spectrum synthesis to a stereo buffer for playback and
 ### Live MIDI (Real-Time)
 16-voice polyphonic playback driven by MIDI controller or on-screen piano keyboard. Pre-renders 5 granular layers at varying densities, then pitch-shifts and blends them per-voice in real time. Live controls for mix, density, and pan.
 
+### Headless CLI
+Offline `render` and `analyze` subcommands for driving the synth from a terminal, shell script, or CI &mdash; no GUI required. After `mvn package`:
+
+```sh
+./granular render --preset presets/my_cello.properties -o out.wav
+./granular analyze --source ../samples/Cello/bowedCello1.wav --format csv -o peaks.csv
+```
+
+See [`docs/CLI.md`](docs/CLI.md) for the full reference, batch examples, and how CLI flags map to GUI controls.
+
 ## Core Features
 
 | Feature | Description |
@@ -70,12 +80,13 @@ src/main/java/org/delightofcomposition/
   synth/
     SimpleSynth.java         Grain synthesis engine
 resources/
-  bowedCello1.wav, bell.wav, cathedral.wav, ...  Default samples
+  fonts/                     UI fonts
+../samples/                  Shared sample library (outside this repo)
 ```
 
 ## Samples
 
-Ships with 14 source/grain/IR samples: bowed cello, bells, bass, tuba, plucked strings, piano, and cathedral impulse response. Drop any `.wav` file onto the sample panels to use your own.
+Default samples (cello, bells, bass, tuba, plucked strings, piano, cathedral IR) live in the shared `ComputerMusic/samples/` directory one level above this repo. The code references them via `../samples/`. Drop any `.wav` file onto the sample panels in the GUI to use your own.
 
 ## Library Naming
 

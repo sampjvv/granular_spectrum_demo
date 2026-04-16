@@ -12,9 +12,9 @@ import org.delightofcomposition.envelopes.Envelope;
 public class SynthParameters {
 
     // Sample files
-    public File sourceFile = new File("resources/bowedCello1.wav");
-    public File grainFile = new File("resources/bell.wav");
-    public File impulseResponseFile = new File("resources/cathedral.wav");
+    public File sourceFile = new File("../samples/Cello/bowedCello1.wav");
+    public File grainFile = new File("../samples/bell.wav");
+    public File impulseResponseFile = new File("../samples/cathedral.wav");
 
     // Source region selection (fractions of source sample, 0.0–1.0)
     public double sourceStartFraction = 0.0;
