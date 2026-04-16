@@ -111,8 +111,8 @@ public class MidiInputHandler implements Receiver {
     }
 
     private synchronized void handleCC(int cc, int value) {
-        // Mod wheel: spring-loaded, always apply directly
-        if (cc == 1) {
+        // Mod wheel or CC93: spring-loaded, always apply directly to mix
+        if (cc == 1 || cc == 93) {
             controls.setMix(value / 127.0);
             return;
         }

@@ -69,6 +69,18 @@ public class SynthParameters {
             new double[]{1.0, 1.0});
     public boolean usePitchEnv = false;
 
+    // Reverse envelope (0.0 = all forward grains, 1.0 = all reversed grains)
+    public Envelope reverseEnv = new Envelope(
+            new double[]{0, 1.0},
+            new double[]{0, 0});
+    public boolean useReverseEnv = false;
+
+    // Pan envelope (0.0 = full left, 0.5 = center, 1.0 = full right)
+    public Envelope panEnv = new Envelope(
+            new double[]{0, 1.0},
+            new double[]{0.5, 0.5});
+    public boolean usePanEnv = false;
+
     public int getWindowSize() {
         return (int) Math.pow(2, windowSizeExponent);
     }
@@ -106,6 +118,10 @@ public class SynthParameters {
         copy.useDynamicsEnv = this.useDynamicsEnv;
         copy.pitchEnv = cloneEnvelope(this.pitchEnv);
         copy.usePitchEnv = this.usePitchEnv;
+        copy.reverseEnv = cloneEnvelope(this.reverseEnv);
+        copy.useReverseEnv = this.useReverseEnv;
+        copy.panEnv = cloneEnvelope(this.panEnv);
+        copy.usePanEnv = this.usePanEnv;
         return copy;
     }
 

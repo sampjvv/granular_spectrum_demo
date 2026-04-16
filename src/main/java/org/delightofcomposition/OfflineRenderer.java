@@ -64,10 +64,15 @@ public final class OfflineRenderer {
         WaveWriter ww = new WaveWriter("_render_temp", bufLen);
 
         for (int i = 0; i < sound.length; i++) {
-            double pan = Math.min(
-                    snap.panSmoothing * 0.5
-                            + (1 - snap.panSmoothing) * 0.5 * (i / (double) sound.length),
-                    1);
+            double pan;
+            if (snap.usePanEnv && snap.panEnv != null) {
+                pan = snap.panEnv.getValue(i / (double) sound.length);
+            } else {
+                pan = Math.min(
+                        snap.panSmoothing * 0.5
+                                + (1 - snap.panSmoothing) * 0.5 * (i / (double) sound.length),
+                        1);
+            }
             ww.df[0][i] += (float) (pan * sound[i]);
             ww.df[1][i] += (float) ((1 - pan) * sound[i]);
         }

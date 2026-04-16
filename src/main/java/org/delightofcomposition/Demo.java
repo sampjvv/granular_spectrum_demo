@@ -108,6 +108,8 @@ public class Demo {
         Envelope mixEnv = params.mixEnv;
         Envelope pitchEnv = params.pitchEnv;
         boolean usePitchEnv = params.usePitchEnv;
+        Envelope reverseEnv = params.reverseEnv;
+        boolean useReverseEnv = params.useReverseEnv;
         String irPath = params.impulseResponseFile.getPath();
 
         double totalDuration = sourceLen / (double) WaveWriter.SAMPLE_RATE;
@@ -154,7 +156,9 @@ public class Demo {
 
                         processWindow(time, sourceSound, synth, windowSize, windowFunc,
                                 controlRate, amplitudeThreshold, grainsPerPeak,
-                                probEnv, pitchEnv, usePitchEnv, sharedBuf, rng,
+                                probEnv, pitchEnv, usePitchEnv,
+                                reverseEnv, useReverseEnv,
+                                sharedBuf, rng,
                                 finalOutputLen);
 
                         int done = completedWindows.incrementAndGet();
@@ -246,6 +250,7 @@ public class Demo {
     private static void processWindow(double time, double[] fullSound, Synth synth,
             int windowSize, double[] windowFunc, double controlRate, double amplitudeThreshold,
             int grainsPerPeak, Envelope probEnv, Envelope pitchEnv, boolean usePitchEnv,
+            Envelope reverseEnv, boolean useReverseEnv,
             double[] outBuf, Random rng, int outputLen) {
 
         double timeScale = outputLen / (double) fullSound.length;
@@ -295,7 +300,10 @@ public class Demo {
                         double ratio = pitchEnv.getValue(t / (double) outputLen);
                         actualFreq = peakFreq * ratio;
                     }
-                    double[] tone = synth.note(actualFreq, peakAmp);
+                    boolean reverse = useReverseEnv && reverseEnv != null
+                            && rng.nextDouble() < reverseEnv.getValue(t / (double) outputLen);
+                    double[] tone = reverse ? synth.noteReverse(actualFreq, peakAmp)
+                                            : synth.note(actualFreq, peakAmp);
                     synchronized (outBuf) {
                         for (int j = 0; j < tone.length && (j + t) < outBuf.length; j++) {
                             outBuf[j + t] += tone[j];
@@ -353,6 +361,8 @@ public class Demo {
         Envelope probEnv = new Envelope(new double[]{0, 1}, new double[]{layerDensity, layerDensity});
         Envelope pitchEnv = params.pitchEnv;
         boolean usePitchEnv = params.usePitchEnv;
+        Envelope reverseEnv = params.reverseEnv;
+        boolean useReverseEnv = params.useReverseEnv;
 
         double totalDuration = sourceLen / (double) WaveWriter.SAMPLE_RATE;
         final double[] sourceSound = fullSound;
@@ -396,7 +406,9 @@ public class Demo {
 
                         processWindow(time, sourceSound, synth, windowSize, windowFunc,
                                 controlRate, amplitudeThreshold, grainsPerPeak,
-                                probEnv, pitchEnv, usePitchEnv, sharedBuf, rng,
+                                probEnv, pitchEnv, usePitchEnv,
+                                reverseEnv, useReverseEnv,
+                                sharedBuf, rng,
                                 finalOutputLen);
 
                         int done = completedWindows.incrementAndGet();

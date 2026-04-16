@@ -719,7 +719,16 @@ public class MainWindow extends JFrame {
             midiDeviceCombo.addItem(info.getName());
         }
         if (!midiDeviceInfos.isEmpty()) {
-            midiDeviceCombo.setSelectedIndex(1); // select first real device
+            // Prefer MiniLab 3 if connected, otherwise first device
+            int selected = 1;
+            for (int i = 0; i < midiDeviceInfos.size(); i++) {
+                String name = midiDeviceInfos.get(i).getName();
+                if (name != null && name.toLowerCase().contains("minilab")) {
+                    selected = i + 1; // +1 for "Auto-detect" entry
+                    break;
+                }
+            }
+            midiDeviceCombo.setSelectedIndex(selected);
         }
     }
 

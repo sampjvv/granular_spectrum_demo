@@ -73,6 +73,7 @@ public class EnvelopeCanvas extends JComponent {
     private final Supplier<Color> curveColorFn;
     final boolean dbMode;
     final boolean pitchMode;
+    boolean panMode;
 
     private int hoveredNodeIndex = -1;
     private int selectedCoordIndex = -1;
@@ -305,6 +306,33 @@ public class EnvelopeCanvas extends JComponent {
                 }
                 g2.setColor(gridLabelColor);
                 g2.drawString(label, 4, gy - 2);
+            }
+        } else if (panMode) {
+            // Pan mode: center line at 50% (value 0.5) with L/R labels
+            int centerCoordY = 250;
+            int cy = coordToScreenY(centerCoordY, h);
+            if (cy >= -10 && cy <= h + 10) {
+                g2.setColor(gridZeroColor);
+                g2.drawLine(0, cy, w, cy);
+                g2.setColor(gridLabelColor);
+                g2.drawString("C", 4, cy - 2);
+            }
+            // Quarter lines for L/R reference
+            int rightCoordY = 125; // value 0.75
+            int leftCoordY = 375;  // value 0.25
+            int ry = coordToScreenY(rightCoordY, h);
+            int ly = coordToScreenY(leftCoordY, h);
+            if (ry >= -10 && ry <= h + 10) {
+                g2.setColor(gridColor);
+                g2.drawLine(0, ry, w, ry);
+                g2.setColor(gridLabelColor);
+                g2.drawString("R", 4, ry - 2);
+            }
+            if (ly >= -10 && ly <= h + 10) {
+                g2.setColor(gridColor);
+                g2.drawLine(0, ly, w, ly);
+                g2.setColor(gridLabelColor);
+                g2.drawString("L", 4, ly - 2);
             }
         } else {
             // Normal mode: adaptive percentage lines

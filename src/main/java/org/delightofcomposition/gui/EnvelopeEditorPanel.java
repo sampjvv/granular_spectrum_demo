@@ -38,14 +38,20 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
     private final Envelope mixEnvelope;
     private final Envelope dynamicsEnvelope;
     private final Envelope pitchEnvelope;
+    private final Envelope reverseEnvelope;
+    private final Envelope panEnvelope;
     private final EnvelopeCanvas densityCanvas;
     private final EnvelopeCanvas mixCanvas;
     private final EnvelopeCanvas dynamicsCanvas;
     private final EnvelopeCanvas pitchCanvas;
+    private final EnvelopeCanvas reverseCanvas;
+    private final EnvelopeCanvas panCanvas;
     private TimbralPreview timbralPreview;
     private final ToggleSwitch dynamicsToggle;
     private final ToggleSwitch pitchToggle;
-    private JPanel densityCard, mixCard, dynamicsCard, pitchCard;
+    private final ToggleSwitch reverseToggle;
+    private final ToggleSwitch panToggle;
+    private JPanel densityCard, mixCard, dynamicsCard, pitchCard, reverseCard, panCard;
     private boolean stacked = false;
 
     public EnvelopeEditorPanel(SynthParameters params) {
@@ -57,6 +63,8 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
         mixEnvelope = envelopeToEditable(params.mixEnv, false, false);
         dynamicsEnvelope = envelopeToEditable(params.dynamicsEnv, true, false);
         pitchEnvelope = envelopeToEditable(params.pitchEnv, false, true);
+        reverseEnvelope = envelopeToEditable(params.reverseEnv, false, false);
+        panEnvelope = envelopeToEditable(params.panEnv, false, false);
 
         densityCanvas = new EnvelopeCanvas(densityEnvelope,
                 () -> Theme.isPaper() ? new Color(0x5A, 0x7A, 0x9A) : Theme.ACCENT);
@@ -68,6 +76,13 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
                 () -> Theme.isSynthwave() ? Theme.SW_GREEN
                     : Theme.isPaper() ? new Color(0x7A, 0x6A, 0x8A)
                     : Theme.DESTRUCTIVE, false, true);
+        reverseCanvas = new EnvelopeCanvas(reverseEnvelope,
+                () -> Theme.isPaper() ? new Color(0xB0, 0x50, 0x50)
+                    : new Color(0xC8, 0x28, 0x28));
+        panCanvas = new EnvelopeCanvas(panEnvelope,
+                () -> Theme.isPaper() ? new Color(0x4A, 0x8A, 0x8A)
+                    : new Color(0x00, 0xAC, 0xC1));
+        panCanvas.panMode = true;
 
         // Dynamics toggle
         dynamicsToggle = new ToggleSwitch(params.useDynamicsEnv);
@@ -82,6 +97,18 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
             params.usePitchEnv = pitchToggle.isSelected();
         });
 
+        // Reverse toggle
+        reverseToggle = new ToggleSwitch(params.useReverseEnv);
+        reverseToggle.addChangeListener(e -> {
+            params.useReverseEnv = reverseToggle.isSelected();
+        });
+
+        // Pan toggle
+        panToggle = new ToggleSwitch(params.usePanEnv);
+        panToggle.addChangeListener(e -> {
+            params.usePanEnv = panToggle.isSelected();
+        });
+
         buildLayout();
     }
 
@@ -91,6 +118,8 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
         mixCanvas.clearChangeListeners();
         dynamicsCanvas.clearChangeListeners();
         pitchCanvas.clearChangeListeners();
+        reverseCanvas.clearChangeListeners();
+        panCanvas.clearChangeListeners();
 
         // Register help texts
         HelpManager help = HelpManager.getInstance();
@@ -106,6 +135,14 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
                 "Controls pitch shift over time. Center line = no change. Up = higher pitch, down = lower. Range: 2 octaves each way.");
         help.register(pitchToggle,
                 "Enable or disable the pitch envelope. When off, grains play at their natural spectral frequency.");
+        help.register(reverseCanvas,
+                "Controls the probability of reversed grains over time. Same editing controls as density envelope.");
+        help.register(reverseToggle,
+                "Enable or disable the reverse envelope. When off, all grains play forward.");
+        help.register(panCanvas,
+                "Controls stereo position over time. Center line = mono, up = right, down = left.");
+        help.register(panToggle,
+                "Enable or disable the pan envelope. When off, uses the pan smoothing slider.");
 
         // Build cards (store references for responsive relayout)
         densityCard = buildEditorCard("Density",
@@ -173,6 +210,16 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
                 pitchCanvas, pitchEnvelope, pitchToggle);
         pitchCard.setMinimumSize(new Dimension(350, 180));
 
+        reverseCard = buildEditorCard("Reverse",
+                "Probability of reversed grains over time. Low = forward, high = reversed (swell-up).",
+                reverseCanvas, reverseEnvelope, reverseToggle);
+        reverseCard.setMinimumSize(new Dimension(350, 180));
+
+        panCard = buildEditorCard("Pan",
+                "Stereo position over time. Center = mono, up = right, down = left.",
+                panCanvas, panEnvelope, panToggle);
+        panCard.setMinimumSize(new Dimension(350, 180));
+
         // Initial grid layout
         layoutCards();
 
@@ -203,6 +250,8 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
         mixCanvas.addChangeListener(e -> timbralPreview.repaint());
         dynamicsCanvas.addChangeListener(e -> timbralPreview.repaint());
         pitchCanvas.addChangeListener(e -> timbralPreview.repaint());
+        reverseCanvas.addChangeListener(e -> timbralPreview.repaint());
+        panCanvas.addChangeListener(e -> timbralPreview.repaint());
     }
 
     private void layoutCards() {
@@ -218,11 +267,15 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
             gbc.gridy = 1; add(mixCard, gbc);
             gbc.gridy = 2; add(dynamicsCard, gbc);
             gbc.gridy = 3; add(pitchCard, gbc);
+            gbc.gridy = 4; add(reverseCard, gbc);
+            gbc.gridy = 5; add(panCard, gbc);
         } else {
             gbc.gridx = 0; gbc.gridy = 0; add(densityCard, gbc);
             gbc.gridx = 1; gbc.gridy = 0; add(mixCard, gbc);
             gbc.gridx = 0; gbc.gridy = 1; add(dynamicsCard, gbc);
             gbc.gridx = 1; gbc.gridy = 1; add(pitchCard, gbc);
+            gbc.gridx = 0; gbc.gridy = 2; add(reverseCard, gbc);
+            gbc.gridx = 1; gbc.gridy = 2; add(panCard, gbc);
         }
     }
 
@@ -498,6 +551,8 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
         mixCanvas.setWaveformData(samples);
         dynamicsCanvas.setWaveformData(samples);
         pitchCanvas.setWaveformData(samples);
+        reverseCanvas.setWaveformData(samples);
+        panCanvas.setWaveformData(samples);
     }
 
     public void syncToParams() {
@@ -507,6 +562,10 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
         params.useDynamicsEnv = dynamicsToggle.isSelected();
         params.pitchEnv = cloneWithData(pitchEnvelope, false, true);
         params.usePitchEnv = pitchToggle.isSelected();
+        params.reverseEnv = cloneWithData(reverseEnvelope, false, false);
+        params.useReverseEnv = reverseToggle.isSelected();
+        params.panEnv = cloneWithData(panEnvelope, false, false);
+        params.usePanEnv = panToggle.isSelected();
     }
 
     public void syncFromParams() {
@@ -516,6 +575,10 @@ public class EnvelopeEditorPanel extends JPanel implements Scrollable {
         dynamicsToggle.setSelected(params.useDynamicsEnv);
         copyEnvelopeData(params.pitchEnv, pitchEnvelope, false, true);
         pitchToggle.setSelected(params.usePitchEnv);
+        copyEnvelopeData(params.reverseEnv, reverseEnvelope, false, false);
+        reverseToggle.setSelected(params.useReverseEnv);
+        copyEnvelopeData(params.panEnv, panEnvelope, false, false);
+        panToggle.setSelected(params.usePanEnv);
         timbralPreview.repaint();
     }
 

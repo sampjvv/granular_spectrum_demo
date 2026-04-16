@@ -24,6 +24,27 @@ public abstract class Synth {
 
     public abstract double[] synthAlg(double freq, double amp);
 
+    public double[] noteReverse(double freq, double amp) {
+        double[] forward = note(freq, amp);
+        // Reverse the array in place
+        for (int i = 0; i < forward.length / 2; i++) {
+            double tmp = forward[i];
+            forward[i] = forward[forward.length - 1 - i];
+            forward[forward.length - 1 - i] = tmp;
+        }
+        // Fade-in envelope (~250ms swell-up, matching live mode)
+        int fadeIn = Math.min(12000, forward.length / 2);
+        for (int i = 0; i < fadeIn; i++) {
+            forward[i] *= i / (double) fadeIn;
+        }
+        // Short fade-out to prevent clicks (~25ms)
+        int fadeOut = Math.min(1200, forward.length / 4);
+        for (int i = 0; i < fadeOut; i++) {
+            forward[forward.length - 1 - i] *= i / (double) fadeOut;
+        }
+        return forward;
+    }
+
     public double[] reverb(double amp, double mix, double[] dry, double[] wet) {
         mix = (1 - amp) * mix;
         double[] sig = new double[wet.length];
