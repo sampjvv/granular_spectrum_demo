@@ -61,7 +61,8 @@ public class ReadSound {
             System.exit(1);
         }
         if (is24bit) {
-            normalizedData = decode24bit(soundData, normalizedData);
+            normalizedData = decode24bit(soundData, normalizedData,
+                    audioFormat.getChannels(), audioFormat.isBigEndian());
         } else {
              // 16-bit audio decoding with stereo-to-mono mixdown
             int channels = audioFormat.getChannels();
@@ -128,41 +129,32 @@ public class ReadSound {
         return normalizedData;
     }
 
-    public static float[] decode24bit(byte[] soundData, float[] normalizedData) {
-        int t = 0;
+    public static float[] decode24bit(byte[] soundData, float[] normalizedData,
+                                      int channels, boolean bigEndian) {
+        int bytesPerFrame = 3 * channels;
+        int frameCount = soundData.length / bytesPerFrame;
         float max = 0;
-        int[] data = new int[normalizedData.length];
 
-        for (int i = 0; i < soundData.length; i += 3) {
-
-            int b1 = soundData[i];// + 128;
-            if (b1 < 0) {
-                // must convert neg twos comp in little byte
-                // because only big byte determines sign in 16-bit neg twos comp
-                b1 = 256 + b1;
+        for (int frame = 0; frame < frameCount; frame++) {
+            float mixedSample = 0;
+            for (int ch = 0; ch < channels; ch++) {
+                int offset = frame * bytesPerFrame + ch * 3;
+                int b1, b2, b3;
+                if (bigEndian) {
+                    b3 = soundData[offset];              // MSB, keep sign
+                    b2 = soundData[offset + 1] & 0xFF;
+                    b1 = soundData[offset + 2] & 0xFF;
+                } else {
+                    b1 = soundData[offset]     & 0xFF;
+                    b2 = soundData[offset + 1] & 0xFF;
+                    b3 = soundData[offset + 2];          // MSB, keep sign
+                }
+                int dataPoint = b1 | (b2 << 8) | (b3 << 16);
+                mixedSample += dataPoint;
             }
-            int b2 = soundData[i + 1];
-            if (b2 < 0) {
-                // must convert neg twos comp in little byte
-                // because only big byte determines sign in 16-bit neg twos comp
-                b2 = 256 + b2;
-            }
-
-            int b3 = soundData[i + 2];// + 128;
-
-            int dataPoint = b1 | (b2 << 8) | (b3 << 16);
-
-            int dp = soundData[i] | (soundData[i + 1] << 8) | (soundData[i + 2] << 16);
-
-            if (soundData[i] >> 3 == 1) {
-                dp = -dp + 1;
-            }
-            // System.out.println(dataPoint + " " + dp);
-
-            max = (float) Math.max(Math.abs(max), Math.abs(dataPoint));
-            data[t] = dataPoint;
-            normalizedData[t++] = (float) (dataPoint); // (double)Short.MAX_VALUE);//Short.MAX_VALUE);// - 1;
-
+            mixedSample /= channels;
+            max = Math.max(max, Math.abs(mixedSample));
+            normalizedData[frame] = mixedSample;
         }
         // byte[] sd2 = new byte[numBytes];
         for (int i = 0; i < normalizedData.length; i++) {
