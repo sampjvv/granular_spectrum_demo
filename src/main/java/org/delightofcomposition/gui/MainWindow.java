@@ -109,6 +109,7 @@ public class MainWindow extends JFrame {
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         setSize(1200, 800);
         setLocationRelativeTo(null);
+        setIconImages(AppIcon.build());
 
         // Solid themed background behind ALL content — avoids Windows L&F white bleed
         JPanel bg = new JPanel(new java.awt.BorderLayout()) {
@@ -260,6 +261,7 @@ public class MainWindow extends JFrame {
                 Theme.refreshTaggedProperties(getContentPane());
                 refreshMenuBar();
                 refreshBackgrounds();
+                setIconImages(AppIcon.build());
                 repaint();
                 ThemePreferences.save(preset);
             });
@@ -561,11 +563,7 @@ public class MainWindow extends JFrame {
 
         // Load source waveform into envelope backgrounds + region selector
         loadSourceWaveform();
-        parameterPanel.setSourceFileChangeListener(file -> {
-            params.sourceStartFraction = 0.0;
-            params.sourceEndFraction = 1.0;
-            loadSourceWaveform();
-        });
+        parameterPanel.setSourceFileChangeListener(this::onSourceFileChanged);
 
         palindromeCrossfadePanel = new PalindromeCrossfadePanel(params);
 
@@ -632,6 +630,7 @@ public class MainWindow extends JFrame {
 
         // ── Live content ──
         liveParamPanel = new LiveParameterPanel(params);
+        liveParamPanel.setSourceFileChangeListener(this::onSourceFileChanged);
         JScrollPane liveLeftScroll = new JScrollPane(liveParamPanel);
         liveLeftScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         liveLeftScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
@@ -697,11 +696,13 @@ public class MainWindow extends JFrame {
             if (renderController.isRendering()) {
                 renderController.cancel();
             }
+            liveParamPanel.syncFromParams();
             toolbarCardLayout.show(toolbarCards, LIVE_MODE);
             contentCardLayout.show(contentCards, LIVE_MODE);
         } else {
             // Switching back to WAV: stop live engine if running
             stopLiveMode();
+            parameterPanel.syncFromParams();
             toolbarCardLayout.show(toolbarCards, WAV_MODE);
             contentCardLayout.show(contentCards, WAV_MODE);
         }
@@ -709,6 +710,12 @@ public class MainWindow extends JFrame {
         toolbarCards.repaint();
         contentCards.revalidate();
         contentCards.repaint();
+    }
+
+    private void onSourceFileChanged(java.io.File file) {
+        params.sourceStartFraction = 0.0;
+        params.sourceEndFraction = 1.0;
+        loadSourceWaveform();
     }
 
     private void refreshMidiDeviceList() {

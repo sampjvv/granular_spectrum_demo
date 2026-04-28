@@ -6,6 +6,10 @@ import java.awt.Graphics2D;
 import java.awt.Insets;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -26,12 +30,10 @@ import org.delightofcomposition.realtime.LiveMidiController;
 public class LiveParameterPanel extends JPanel implements Scrollable {
 
     private final SynthParameters params;
+    private final List<Runnable> syncActions = new ArrayList<>();
 
     // Samples
-    private SampleDropPanel sourceDropPanel;
-    private SampleDropPanel grainDropPanel;
-    private StepperControl refFreqStepper;
-    private SampleDropPanel irDropPanel;
+    private SamplesSection samplesSection;
 
     // Synthesis
     private SegmentedControl windowSizeSegmented;
@@ -79,13 +81,13 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
 
     private void registerHelpTexts() {
         HelpManager help = HelpManager.getInstance();
-        help.register(sourceDropPanel,
+        help.register(samplesSection.getSourceDropPanel(),
                 "The audio file whose spectral content will be analyzed and resynthesized as granular texture.");
-        help.register(grainDropPanel,
+        help.register(samplesSection.getGrainDropPanel(),
                 "The short audio sample used as the building block for granular synthesis. Its timbre colors the output.");
-        help.register(refFreqStepper,
+        help.register(samplesSection.getRefFreqStepper(),
                 "The fundamental frequency (Hz) of the grain sample. Used to tune grains to match spectral peaks.");
-        help.register(irDropPanel,
+        help.register(samplesSection.getIrDropPanel(),
                 "An impulse response recording used for convolution reverb, placing the sound in a virtual space.");
         help.register(windowSizeSegmented,
                 "FFT window size: larger = better frequency resolution but smears timing. Smaller = better timing but coarser frequency.");
@@ -123,40 +125,8 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
     }
 
     private JPanel buildSamplesSection() {
-        JPanel card = sectionCard();
-
-        card.add(Theme.sectionHeader("Samples"));
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
-
-        sourceDropPanel = new SampleDropPanel("Source Sample", params.sourceFile,
-                file -> params.sourceFile = file);
-        sourceDropPanel.setAlignmentX(0);
-        card.add(sourceDropPanel);
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
-
-        grainDropPanel = new SampleDropPanel("Grain Sample", params.grainFile,
-                file -> params.grainFile = file);
-        grainDropPanel.setAlignmentX(0);
-        card.add(grainDropPanel);
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
-
-        JLabel refLabel = Theme.paramLabel("Reference Frequency");
-        refLabel.setAlignmentX(0);
-        card.add(refLabel);
-        card.add(Box.createVerticalStrut(Theme.LABEL_GAP));
-        refFreqStepper = new StepperControl(params.grainReferenceFreq, 20, 20000, 1, "%.0f Hz");
-        refFreqStepper.setAlignmentX(0);
-        refFreqStepper.addChangeListener(e -> params.grainReferenceFreq = refFreqStepper.getDoubleValue());
-        card.add(refFreqStepper);
-        card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
-
-        irDropPanel = new SampleDropPanel("Impulse Response", params.impulseResponseFile,
-                file -> params.impulseResponseFile = file);
-        irDropPanel.setAlignmentX(0);
-        card.add(irDropPanel);
-
-        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
-        return card;
+        samplesSection = new SamplesSection(params, false);
+        return samplesSection.build();
     }
 
     private JPanel buildSynthesisSection() {
@@ -176,6 +146,7 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
                 params.windowSizeExponent = windowSizeSegmented.getSelectedIndex() + 10);
         card.add(windowSizeSegmented);
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        syncActions.add(() -> windowSizeSegmented.setSelectedIndex(params.windowSizeExponent - 10));
 
         JLabel crLabel = Theme.paramLabel("Control Rate");
         crLabel.setAlignmentX(0);
@@ -186,6 +157,7 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
         controlRateStepper.addChangeListener(e -> params.controlRate = controlRateStepper.getDoubleValue());
         card.add(controlRateStepper);
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        syncActions.add(() -> controlRateStepper.setValue(params.controlRate));
 
         JLabel gpLabel = Theme.paramLabel("Grains / Peak");
         gpLabel.setAlignmentX(0);
@@ -196,6 +168,7 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
         grainsPerPeakStepper.addChangeListener(e -> params.grainsPerPeak = grainsPerPeakStepper.getIntValue());
         card.add(grainsPerPeakStepper);
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        syncActions.add(() -> grainsPerPeakStepper.setValue(params.grainsPerPeak));
 
         ampThresholdSlider = new LabeledSlider("Amp Threshold", 1, 500,
                 (int) (params.amplitudeThreshold * 1000),
@@ -205,6 +178,7 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
                 params.amplitudeThreshold = ampThresholdSlider.getValue() / 1000.0);
         card.add(ampThresholdSlider);
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        syncActions.add(() -> ampThresholdSlider.setValue((int) (params.amplitudeThreshold * 1000)));
 
         dramaticSlider = new LabeledSlider("Dramatic", 1, 2000,
                 (int) (params.dramaticFactor * 100),
@@ -213,6 +187,7 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
         dramaticSlider.addChangeListener(e ->
                 params.dramaticFactor = dramaticSlider.getValue() / 100.0);
         card.add(dramaticSlider);
+        syncActions.add(() -> dramaticSlider.setValue((int) (params.dramaticFactor * 100)));
 
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
         return card;
@@ -230,6 +205,7 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
         toggleRow.setAlignmentX(0);
         card.add(toggleRow);
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        syncActions.add(() -> useReverbToggle.setSelected(params.useReverb));
 
         sourceReverbSlider = new LabeledSlider("Source Mix", 0, 100,
                 (int) (params.sourceReverbMix * 100), v -> v + "%");
@@ -238,6 +214,7 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
                 params.sourceReverbMix = sourceReverbSlider.getValue() / 100.0);
         card.add(sourceReverbSlider);
         card.add(Box.createVerticalStrut(Theme.CONTROL_GAP));
+        syncActions.add(() -> sourceReverbSlider.setValue((int) (params.sourceReverbMix * 100)));
 
         synthReverbSlider = new LabeledSlider("Synth Mix", 0, 100,
                 (int) (params.synthReverbMix * 100), v -> v + "%");
@@ -245,6 +222,7 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
         synthReverbSlider.addChangeListener(e ->
                 params.synthReverbMix = synthReverbSlider.getValue() / 100.0);
         card.add(synthReverbSlider);
+        syncActions.add(() -> synthReverbSlider.setValue((int) (params.synthReverbMix * 100)));
 
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
         return card;
@@ -353,6 +331,15 @@ public class LiveParameterPanel extends JPanel implements Scrollable {
 
     public void setLiveController(LiveMidiController controller) {
         this.liveController = controller;
+    }
+
+    public void setSourceFileChangeListener(Consumer<File> listener) {
+        if (samplesSection != null) samplesSection.setSourceFileChangeListener(listener);
+    }
+
+    public void syncFromParams() {
+        if (samplesSection != null) samplesSection.syncFromParams();
+        for (Runnable action : syncActions) action.run();
     }
 
     /** Start polling ControlState to sync sliders when MIDI CC changes them externally. */
