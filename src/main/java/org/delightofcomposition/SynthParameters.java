@@ -55,8 +55,8 @@ public class SynthParameters {
             new double[]{0, 0.7, 1.0},
             new double[]{0, 0, 1});
     public Envelope dramaticEnvShape = new Envelope(
-            new double[]{0, 0.25, 1},
-            new double[]{1, 0.7, 1});
+            new double[]{0, 1},
+            new double[]{1, 1});
 
     public Envelope dynamicsEnv = new Envelope(
             new double[]{0, 1.0},
